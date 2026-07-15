@@ -161,3 +161,40 @@ cython_debug/
 
 .ruff_cache/
 *.zip
+
+# --- CS336 assignment: local / generated ---
+
+# Downloaded training corpora (see README); multi-GB, fetch with wget
+data/
+
+# Personal notes, tutorials, and other non-assignment files
+misc/
+
+# Experiment tracking and training outputs
+wandb/
+checkpoints/
+runs/
+logs/
+*.log
+
+# Model checkpoints and large arrays (keep tests/fixtures and tests/_snapshots tracked)
+*.pt
+*.pth
+*.ckpt
+!tests/fixtures/**
+!tests/_snapshots/**
+
+# pytest / submission artifacts
+test_results.xml
+cs336-*-submission.zip
+
+# Editor / OS
+.cursor/
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*~
+
+# uv
+.uv/
