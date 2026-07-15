@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import regex as re
+
+
 def train_bpe(
     input_path: str,
     vocab_size: int,
@@ -13,7 +16,7 @@ def train_bpe(
     merges: list[tuple[bytes, bytes]] = []
 
     corpus = read_corpus(input_path)
-    # segments = split_special_tokens(corpus, special_tokens)
+    segments = split_special_tokens(corpus, special_tokens)
     # pretokens = pretokenize(segments)
     # merges = merge_loop(pretokens, vocab, vocab_size, special_tokens)
 
@@ -44,22 +47,9 @@ def split_special_tokens(corpus: str, special_tokens: list[str]) -> list[str]:
     切分符 = special_tokens 里的那些字符串（精确匹配整个子串）。
     例如 special_tokens=["<|endoftext|>"] 时，切分符就是字面量 "<|endoftext|>"。
 
-    不是:
-      - 不是按空格 split（空格留给后面的 GPT-2 pre-tokenizer 处理）
-      - 不是按字节切
-      - 不是按单个字符切
-
     是:
       - 在语料里找到 "<|endoftext|>" 这个完整子串，在它出现的位置下刀
       - 多个 special token 时，任意一个出现都算边界
-
-  ── special token 到底是什么？──
-    你的理解对: 本作业里主要就是 <|endoftext|>，表示「一篇文档结束」。
-    它不是空格。空格是普通字符，会留在 segment 里，后面 pre-tokenize 时处理。
-
-    special token 的两重身份:
-      1. 在 init_vocab 里: 作为一个完整 token 放进词表（有固定 ID）
-      2. 在训练统计时: 作为切分边界，且不参与 merge 计数（所以要先 split 掉）
 
   ── 举例 ──
     输入 corpus:
@@ -82,11 +72,22 @@ def split_special_tokens(corpus: str, special_tokens: list[str]) -> list[str]:
   ── 实现思路（单线程版，先想清再写）──
     1. 用 re.split，分隔 pattern 由 special_tokens 拼出来
     2. 每个 token 要先 re.escape()，因为 token 里可能有 | < > 等正则特殊字符
-    3. 多个 token 用 "|" 连接成一个大 pattern（讲义原话）
+    3. 多个 token 用 "|" 连接成一个大 pattern
     4. 对 split 得到的 list 过滤掉 "" 空段
     5. return 剩下的 list[str]
     """
-    raise NotImplementedError
+    if not special_tokens:
+        return [corpus] if corpus else []
+
+    # pattern：传给 re.split 的「分隔符正则」，不是返回值类型。
+    # re.split(pattern, text) 在每次匹配到 pattern 的位置切开 text。
+    # 例：pattern = r"<\|endoftext\|>"  →  按字面量 <|endoftext|> 下刀
+    #
+    # 多个 special token 时，pattern = "tokA|tokB" 表示「遇到 A 或 B 都切」；
+    # 这里的 | 是正则里的「或」，所以每个 token 要先 re.escape。
+    pattern = "|".join(re.escape(tok) for tok in special_tokens)
+    segments = re.split(pattern, corpus)
+    return [segment for segment in segments if segment]
 
 
 def read_corpus(input_path: str) -> str:
