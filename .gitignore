@@ -184,7 +184,9 @@ logs/
 !tests/fixtures/**
 !tests/_snapshots/**
 
-# pytest / submission artifacts
+# local training artifacts
+artifacts/
+
 test_results.xml
 cs336-*-submission.zip
 

@@ -1,8 +1,32 @@
 import json
 import time
 
+from cs336_basics.tokenizer import (
+    DEFAULT_PRE_TOKENIZE_WORKERS,
+    pre_tokenize,
+    read_corpus,
+    split_special_tokens,
+)
+
 from .adapters import run_train_bpe
 from .common import FIXTURES_PATH, gpt2_bytes_to_unicode
+
+
+def _time_train_bpe(input_path, *, pre_tokenize_workers: int) -> float:
+    start = time.perf_counter()
+    run_train_bpe(
+        input_path=input_path,
+        vocab_size=500,
+        special_tokens=["<|endoftext|>"],
+        pre_tokenize_workers=pre_tokenize_workers,
+    )
+    return time.perf_counter() - start
+
+
+def _time_pre_tokenize_only(segments, *, workers: int) -> float:
+    start = time.perf_counter()
+    pre_tokenize(segments, workers=workers)
+    return time.perf_counter() - start
 
 
 def test_train_bpe_speed():
@@ -14,14 +38,32 @@ def test_train_bpe_speed():
     takes around 3 seconds.
     """
     input_path = FIXTURES_PATH / "corpus.en"
-    start_time = time.time()
-    _, _ = run_train_bpe(
-        input_path=input_path,
-        vocab_size=500,
-        special_tokens=["<|endoftext|>"],
+    corpus = read_corpus(str(input_path))
+    segments = split_special_tokens(corpus, ["<|endoftext|>"])
+    n_workers = min(DEFAULT_PRE_TOKENIZE_WORKERS, len(segments))
+
+    single_pre_tokenize = _time_pre_tokenize_only(segments, workers=1)
+    parallel_pre_tokenize = _time_pre_tokenize_only(
+        segments, workers=DEFAULT_PRE_TOKENIZE_WORKERS
     )
-    end_time = time.time()
-    assert end_time - start_time < 1.5
+    single_e2e = _time_train_bpe(input_path, pre_tokenize_workers=1)
+    parallel_e2e = _time_train_bpe(
+        input_path, pre_tokenize_workers=DEFAULT_PRE_TOKENIZE_WORKERS
+    )
+
+    print(
+        f"\n"
+        f"segments={len(segments)}, parallel_workers={n_workers} "
+        f"(requested {DEFAULT_PRE_TOKENIZE_WORKERS})\n"
+        f"pre_tokenize only  single={single_pre_tokenize:.3f}s  "
+        f"parallel={parallel_pre_tokenize:.3f}s  "
+        f"delta={parallel_pre_tokenize - single_pre_tokenize:+.3f}s\n"
+        f"train_bpe e2e      single={single_e2e:.3f}s  "
+        f"parallel={parallel_e2e:.3f}s  "
+        f"delta={parallel_e2e - single_e2e:+.3f}s"
+    )
+
+    assert parallel_e2e < 1.5
 
 
 def test_train_bpe():
