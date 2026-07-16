@@ -1,12 +1,12 @@
 import json
 import time
 
-from cs336_basics.tokenizer import (
+from cs336_basics.tokenization import (
     DEFAULT_PRE_TOKENIZE_WORKERS,
     pre_tokenize,
-    read_corpus,
     split_special_tokens,
 )
+from cs336_basics.tokenization.train_bpe import read_corpus
 
 from .adapters import run_train_bpe
 from .common import FIXTURES_PATH, gpt2_bytes_to_unicode
