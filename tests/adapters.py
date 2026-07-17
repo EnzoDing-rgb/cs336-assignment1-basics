@@ -84,9 +84,9 @@ def run_swiglu(
     Returns:
         Float[Tensor, "... d_model"]: Output embeddings of the same shape as the input embeddings.
     """
-    from cs336_basics.model.language_model import PointWise_FFN
+    from cs336_basics.model.language_model import SwiGLU
 
-    ffn = PointWise_FFN(d_model, d_ff, device=w1_weight.device, dtype=w1_weight.dtype)
+    ffn = SwiGLU(d_model, d_ff, device=w1_weight.device, dtype=w1_weight.dtype)
     ffn.w1.weight.data = w1_weight
     ffn.w2.weight.data = w2_weight
     ffn.w3.weight.data = w3_weight
@@ -235,7 +235,7 @@ def run_rope(
     Returns:
         Float[Tensor, " ... sequence_length d_k"]: Tensor with RoPEd input.
     """
-    from cs336_basics.model.language_model import RoPE
+    from cs336_basics.model.attention import RoPE
 
     rope = RoPE(theta=theta, d_k=d_k, max_seq_len=max_seq_len, device=in_query_or_key.device)
     return rope.forward(in_query_or_key, token_positions)
@@ -311,7 +311,41 @@ def run_transformer_block(
         Float[Tensor, "batch sequence_length d_model"] Tensor with the output of
         running the Transformer block on the input features while using RoPE.
     """
-    raise NotImplementedError
+    from cs336_basics.model.language_model import TransformerBlock
+
+    block = TransformerBlock(
+        d_model=d_model,
+        num_heads=num_heads,
+        d_ff=d_ff,
+        max_seq_len=max_seq_len,
+        theta=theta,
+        device=in_features.device,
+        dtype=in_features.dtype,
+    )
+    # 例子：d_model=768, num_heads=8 → d_k=64；d_ff=2048
+    # Linear.weight 形状是 (out, in)；前向是 x @ W.T
+    #
+    # Q/K/V：各 (768, 768) —— 一次投出整条 768，再切成 8 头 × 64
+    block.attn.q_proj.weight.data = weights["attn.q_proj.weight"]
+    block.attn.k_proj.weight.data = weights["attn.k_proj.weight"]
+    block.attn.v_proj.weight.data = weights["attn.v_proj.weight"]
+    # O：也是 (768, 768) —— 8 头拼回 768 后再混一遍
+    block.attn.o_proj.weight.data = weights["attn.output_proj.weight"]
+    # ln1/ln2：测试 fixture 的 key；对应 attn 前 / FFN 前 的 RMSNorm
+    # 赋值的是 RMSNorm 自己的缩放向量 weight，形状 (768,)
+    # 与下面 FFN 的 W1/W2/W3 无关：那是另一套线性层
+    # forward：rms 从当前 x 算；输出 = (x / rms) * weight
+    block.attn_rms_norm.weight.data = weights["ln1.weight"]
+    # SwiGLU 三件套（都是矩阵，都不是上面那个 (768,) 缩放向量）：
+    #   W1 (2048, 768)：升维，经 SiLU 当「门」  → SiLU(W1 x)
+    #   W3 (2048, 768)：升维，被门逐元素乘    → W3 x
+    #   W2 (768, 2048)：把门控结果压回 768    → W2(SiLU(W1x) ⊙ W3x)
+    block.ffn.w1.weight.data = weights["ffn.w1.weight"]
+    block.ffn.w2.weight.data = weights["ffn.w2.weight"]
+    block.ffn.w3.weight.data = weights["ffn.w3.weight"]
+    # FFN 前那套 RMSNorm 的缩放向量，同样是 (768,)，与 W1/W2/W3 独立
+    block.ffn_rms_norm.weight.data = weights["ln2.weight"]
+    return block(in_features)
 
 
 def run_transformer_lm(
@@ -393,7 +427,37 @@ def run_transformer_lm(
         Float[Tensor, "batch_size sequence_length vocab_size"]: Tensor with the predicted unnormalized
         next-word distribution for each token.
     """
-    raise NotImplementedError
+    from cs336_basics.model.language_model import TransformerLM
+
+    model = TransformerLM(
+        vocab_size=vocab_size,
+        context_length=context_length,
+        d_model=d_model,
+        num_layers=num_layers,
+        num_heads=num_heads,
+        d_ff=d_ff,
+        rope_theta=rope_theta,
+        device=in_indices.device,
+        dtype=weights["lm_head.weight"].dtype,
+    )
+    # embedding_weight: (vocab_size, d_model)
+    model.token_embeddings.weight.data = weights["token_embeddings.weight"]
+    for i, layer in enumerate(model.layers):
+      # Q/K/V/O: 各 (d_model, d_model)；fixture 里 O 叫 output_proj
+      layer.attn.q_proj.weight.data = weights[f"layers.{i}.attn.q_proj.weight"]
+      layer.attn.k_proj.weight.data = weights[f"layers.{i}.attn.k_proj.weight"]
+      layer.attn.v_proj.weight.data = weights[f"layers.{i}.attn.v_proj.weight"]
+      layer.attn.o_proj.weight.data = weights[f"layers.{i}.attn.output_proj.weight"]
+      # ln1/ln2 → 两套 RMSNorm 的缩放向量 γ，形状 (d_model,)
+      layer.attn_rms_norm.weight.data = weights[f"layers.{i}.ln1.weight"]
+      layer.ffn.w1.weight.data = weights[f"layers.{i}.ffn.w1.weight"]
+      layer.ffn.w2.weight.data = weights[f"layers.{i}.ffn.w2.weight"]
+      layer.ffn.w3.weight.data = weights[f"layers.{i}.ffn.w3.weight"]
+      layer.ffn_rms_norm.weight.data = weights[f"layers.{i}.ln2.weight"]
+    model.ln_final.weight.data = weights["ln_final.weight"]
+    # lm_head.weight: (vocab_size, d_model)
+    model.lm_head.weight.data = weights["lm_head.weight"]
+    return model(in_indices)
 
 
 def run_rmsnorm(

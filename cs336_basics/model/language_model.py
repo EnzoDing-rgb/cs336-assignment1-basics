@@ -9,10 +9,13 @@ from __future__ import annotations
 
 import torch
 import torch.nn as nn
-from jaxtyping import Float
+from jaxtyping import Float, Int
 from torch import Tensor
 
+from cs336_basics.model.attention import MultiheadSelfAttention
+from cs336_basics.model.embedding import Embedding
 from cs336_basics.model.linear import Linear
+from cs336_basics.model.normalization import RMSNorm
 
 
 def compute_d_ff(d_model: int) -> int:
@@ -21,8 +24,12 @@ def compute_d_ff(d_model: int) -> int:
   return ((d_ff + 63) // 64) * 64
 
 
-class PointWise_FFN(nn.Module):
-  """Position-wise SwiGLU FFN: W2(SiLU(W1 x) ⊙ W3 x)."""
+class SwiGLU(nn.Module):
+  """Position-wise feed-forward with SwiGLU: W2(SiLU(W1 x) ⊙ W3 x).
+
+  「position-wise」= 每个大格子自己算，不看别的大格子；
+  「SwiGLU」= 具体门控公式（SiLU 门 × 另一路线性）。
+  """
 
   def __init__(
     self,
@@ -46,94 +53,130 @@ class PointWise_FFN(nn.Module):
     return self.w2(hidden)
 
 
-class RoPE(nn.Module):
-  """按 token 在句中的 pos，对 Q/K（已是 d_k 维）做逐对 2D 旋转。
+class TransformerBlock(nn.Module):
+  """Pre-norm Transformer block：注意力 sub-layer + 前馈 sub-layer。
 
-  全文例子（用小数字演示，真实模型 d_k 通常是 64）：
-    句子:  I    love  this  cute  cat
-    pos:   0     1     2     3     4
-    theta=10000, d_k=4, max_seq_len=5
+  全文统一数字例子：
+    d_model=768, num_heads=8 → 每头 64；d_ff=2048
+    batch=2, seq=3（"I love cats"），x.shape = (2, 3, 768)
+
+  每个 sub-layer 都是：先 RMSNorm → 再主运算 → 再残差加回去。
   """
 
-  def __init__(self, theta: float, d_k: int, max_seq_len: int, device: torch.device | None = None) -> None:
+  def __init__(
+    self,
+    d_model: int,
+    num_heads: int,
+    d_ff: int,
+    *,
+    max_seq_len: int,
+    theta: float,
+    device: torch.device | None = None,
+    dtype: torch.dtype | None = None,
+  ) -> None:
     super().__init__()
-    self.theta = theta
-    self.d_k = d_k
 
-    # pair_idx：告诉公式「第 k 对」用哪个指数。长度 = d_k/2
-    # 例子 d_k=4 → pair_idx = tensor([0., 2.])，对应 k=0 和 k=1 两对
-    pair_idx = torch.arange(0, d_k, 2, device=device, dtype=torch.float32)
+    # 注意力前的归一化（每个大格子 768 维自己归一）
+    self.attn_rms_norm = RMSNorm(d_model, device=device, dtype=dtype)
+    # 带 RoPE 的因果多头自注意力
+    self.attn = MultiheadSelfAttention(
+      d_model,
+      num_heads,
+      max_seq_len=max_seq_len,
+      theta=theta,
+      device=device,
+      dtype=dtype,
+    )
 
-    # inv_freq[k] = 1 / Θ^(2k/d_k)，第 k 对转多「快」
-    # 例子 theta=10000, d_k=4:
-    #   inv_freq = tensor([1.0000, 0.0100])
-    #   k=0: 1/10000^0 = 1
-    #   k=1: 1/10000^0.5 = 0.01
-    # shape: (d_k/2,) → 例子里是 (2,)
-    inv_freq = 1.0 / (theta ** (pair_idx / d_k))
+    # 前馈前的归一化（另一套可学习 weight，不和上面共用）
+    self.ffn_rms_norm = RMSNorm(d_model, device=device, dtype=dtype)
+    # 每个大格子自己做的 SwiGLU：768 → 2048 门控 → 768
+    self.ffn = SwiGLU(d_model, d_ff, device=device, dtype=dtype)
 
-    # pos：句子里可能出现的位置编号，从 0 到 max_seq_len-1
-    # 例子 max_seq_len=5 → pos = tensor([0., 1., 2., 3., 4.])
-    # shape: (max_seq_len,) → 例子里是 (5,)
-    pos = torch.arange(max_seq_len, device=device, dtype=torch.float32)
+  def forward(
+    self,
+    x: Float[Tensor, "batch seq d_model"],
+    token_positions: Int[Tensor, "batch seq"] | None = None,
+  ) -> Float[Tensor, "batch seq d_model"]:
+    # x 例: (2, 3, 768)
+    batch, seq_len, _ = x.shape
 
-    # angles[pos, k] = pos * inv_freq[k] = θ(pos, k)
-    # shape: (max_seq_len, d_k/2) → 例子里是 (5, 2)
-    # 完整表（例子）:
-    #   pos=0 → [0.00,  0.000]
-    #   pos=1 → [1.00,  0.010]
-    #   pos=2 → [2.00,  0.020]
-    #   pos=3 → [3.00,  0.030]
-    #   pos=4 → [4.00,  0.040]   ← "cat" 那一行
-    angles = pos[:, None] * inv_freq[None, :]
+    # RoPE 需要每个大格子的座位号；没传入就按 0..seq-1 填
+    # 例: token_positions = [[0,1,2],[0,1,2]]  shape (2, 3)
+    if token_positions is None:
+      token_positions = torch.arange(seq_len, device=x.device).unsqueeze(0).expand(batch, -1)
 
-    # cos_cached / sin_cached：把上面每个角度先算好，forward 里只查表
-    # shape 同 angles → 例子 (5, 2)
-    # cos_cached[4] = tensor([cos(4.0), cos(0.04)]) ≈ tensor([-0.6536,  0.9992])
-    # sin_cached[4] = tensor([sin(4.0), sin(0.04)]) ≈ tensor([-0.7568,  0.0400])
-    self.register_buffer("cos_cached", angles.cos(), persistent=False)
-    self.register_buffer("sin_cached", angles.sin(), persistent=False)
-
-  def forward(self, x: torch.Tensor, token_positions: torch.Tensor) -> torch.Tensor:
-    # ── 输入 x ──
-    # 某一个 head 的 Q 或 K，最后一维已经是 d_k（W_Q/W_K 在别处算完了）
-    # 例子 batch=2, 5 个词, d_k=4 → x.shape = (2, 5, 4)
+    # ── sub-layer 1：注意力 ──
+    # y1 = x + MultiHeadSelfAttention(RMSNorm(x))
     #
-    # x[0, 4, :] = "cat"(pos=4) 在 batch0 里的 q 向量，比如 tensor([3., 4., 5., 6.])
-    #               拆开就是 (a₀,b₀)=(3,4), (a₁,b₁)=(5,6)
+    # attn_rms_norm(x): (2, 3, 768) → (2, 3, 768)  幅度稳住
+    # attn(...):        大格子之间换信息，输出仍 (2, 3, 768)
+    # 残差 +x:          把原始 x 加回去，信息高速公路
+    x = x + self.attn(self.attn_rms_norm(x), token_positions=token_positions)
 
-    # ── 输入 token_positions ──
-    # 每个 seq 格子填「这个词是句中第几个」
-    # 例子 → tensor([[0, 1, 2, 3, 4],
-    #                [0, 1, 2, 3, 4]])   shape (2, 5)
+    # ── sub-layer 2：前馈 ──
+    # y = y1 + SwiGLU(RMSNorm(y1))
+    #
+    # ffn_rms_norm(x): (2, 3, 768) → (2, 3, 768)
+    # ffn(...):        每个大格子独自 768→2048 门控→768，互不 attend
+    # 残差:            再加回进入本 sub-layer 前的 x
+    x = x + self.ffn(self.ffn_rms_norm(x))
 
-    # ── 查 cos / sin 表 ──
-    # cos_cached[token_positions]：按每个格子的 pos 取对应行
-    # 例子 cos.shape = (2, 5, 2)
-    #   cos[0, 4, :] = cos_cached[4] ≈ tensor([-0.6536,  0.9992])  ← "cat" 两个 k 的 cos
-    #   cos[0, 1, :] = cos_cached[1] ≈ tensor([ 0.5403,  0.9999])  ← "love"
-    cos = self.cos_cached[token_positions]
-    sin = self.sin_cached[token_positions]  # shape 同 cos，例子 (2, 5, 2)
+    # 输出仍是 (2, 3, 768)，交给下一层 block 或最终归一化
+    return x
 
-    # ── 拆成 a_k, b_k ──
-    # x[..., 0::2] 取偶数位 → 所有 a_k
-    # x[..., 1::2] 取奇数位 → 所有 b_k
-    # 例子 x[0,4,:]=[3,4,5,6] → a=tensor([3.,5.]), b=tensor([4.,6.])
-    # shape: (..., seq, d_k/2) → 例子 (2, 5, 2)
-    a = x[..., 0::2]
-    b = x[..., 1::2]
 
-    # ── 2D 旋转（减号来自旋转矩阵，不是 pos 为负）──
-    # 对 "cat" (pos=4, k=0): a₀'=cos(4)*3 - sin(4)*4
-    # 对 "cat" (pos=4, k=1): a₁'=cos(0.04)*5 - sin(0.04)*6
-    # shape 不变 → 例子 a_rot.shape = (2, 5, 2)
-    a_rot = a * cos - b * sin
-    b_rot = a * sin + b * cos
+class TransformerLM(nn.Module):
+  """整网：Embedding → N×Block → Final RMSNorm → LM Head。
 
-    # ── 拼回 d_k 维 ──
-    # out[0, 4, :] = [a₀', b₀', a₁', b₁']，还是 4 个数
-    # shape 与 x 完全相同 → 例子 (2, 5, 4)
-    out = torch.empty_like(x)
-    out[..., 0::2] = a_rot
-    out[..., 1::2] = b_rot
-    return out
+  例子：vocab=10000, d_model=768, num_layers=2, batch=2, seq=3
+    token_ids (2, 3) → logits (2, 3, 10000)
+  """
+
+  def __init__(
+    self,
+    vocab_size: int,
+    context_length: int,
+    d_model: int,
+    num_layers: int,
+    num_heads: int,
+    d_ff: int,
+    rope_theta: float,
+    *,
+    device: torch.device | None = None,
+    dtype: torch.dtype | None = None,
+  ) -> None:
+    super().__init__()
+    # embedding_weight 就挂在这里：形状 (vocab_size, d_model)，前向按 id 取行
+    self.token_embeddings = Embedding(vocab_size, d_model, device=device, dtype=dtype)
+    self.layers = nn.ModuleList(
+      [
+        TransformerBlock(
+          d_model,
+          num_heads,
+          d_ff,
+          max_seq_len=context_length,
+          theta=rope_theta,
+          device=device,
+          dtype=dtype,
+        )
+        for _ in range(num_layers)
+      ]
+    )
+    self.ln_final = RMSNorm(d_model, device=device, dtype=dtype)
+    # LM Head：就是一层线性，768 → vocab_size；weight 形状 (vocab_size, 768)
+    self.lm_head = Linear(d_model, vocab_size, device=device, dtype=dtype)
+
+  def forward(
+    self,
+    token_ids: Int[Tensor, "batch seq"],
+  ) -> Float[Tensor, "batch seq vocab_size"]:
+    # ① 查表：token_ids (2, 3) → x (2, 3, 768)
+    x = self.token_embeddings(token_ids)
+    # ② 叠 N 层 block，形状始终 (2, 3, 768)
+    for layer in self.layers:
+      x = layer(x)
+    # ③ 出口 RMSNorm
+    x = self.ln_final(x)
+    # ④ LM Head → logits (2, 3, vocab_size)
+    return self.lm_head(x)
