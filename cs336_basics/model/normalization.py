@@ -1,4 +1,4 @@
-"""RMSNorm."""
+"""RMSNorm and softmax."""
 
 from __future__ import annotations
 
@@ -6,6 +6,17 @@ import torch
 import torch.nn as nn
 from jaxtyping import Float
 from torch import Tensor
+
+
+def softmax(x: Float[Tensor, "..."], dim: int) -> Float[Tensor, "..."]:
+  """Numerically stable softmax along `dim`.
+
+  Subtracts the max along `dim` before exp so large logits do not overflow.
+  Softmax is invariant to adding a constant to all entries along that dim.
+  """
+  x_max = torch.amax(x, dim=dim, keepdim=True)
+  exp_x = torch.exp(x - x_max)
+  return exp_x / torch.sum(exp_x, dim=dim, keepdim=True)
 
 
 class RMSNorm(nn.Module):
