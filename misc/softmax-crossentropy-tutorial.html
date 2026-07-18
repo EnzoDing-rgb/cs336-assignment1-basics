@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Softmax · 交叉熵 · 梯度 — 数值教程</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css" />
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body, {delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}]});"></script>
+  <style>
+    :root {
+      --bg: #ffffff; --card: #f6f8fa; --border: #d0d7de; --text: #1f2328; --muted: #656d76;
+      --accent: #0969da; --green: #1a7f37; --purple: #8250df;
+      --conv: #ddf4ff; --conv-border: #54aeff; --deriv: #fff8c5; --deriv-border: #d4a72c;
+    }
+    * { box-sizing: border-box; }
+    body { font-family: "SF Pro Text", "PingFang SC", system-ui, sans-serif; background: var(--bg); color: var(--text); line-height: 1.75; max-width: 860px; margin: 0 auto; padding: 2rem 1.5rem 4rem; }
+    h1 { font-size: 1.75rem; font-weight: 700; margin-bottom: 0.25rem; }
+    .subtitle { color: var(--muted); margin-bottom: 1.5rem; font-size: 0.95rem; }
+    h2 { font-size: 1.25rem; color: var(--accent); margin: 2.5rem 0 1rem; padding-bottom: 0.4rem; border-bottom: 1px solid var(--border); }
+    h3 { font-size: 1.05rem; color: var(--purple); margin: 1.5rem 0 0.75rem; }
+    h4 { font-size: 0.98rem; margin: 1rem 0 0.5rem; }
+    p { margin: 0.75rem 0; }
+    .card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 1.25rem 1.5rem; margin: 1rem 0; }
+    .card.highlight { border-color: var(--accent); }
+    .card.convention { background: var(--conv); border-color: var(--conv-border); }
+    .card.derivation { background: var(--deriv); border-color: var(--deriv-border); }
+    .tag { display: inline-block; font-size: 0.75rem; font-weight: 700; padding: 0.15rem 0.55rem; border-radius: 4px; margin-bottom: 0.5rem; }
+    .tag.conv { background: var(--conv-border); color: #fff; }
+    .tag.deriv { background: var(--deriv-border); color: #fff; }
+    .tag.fact { background: var(--green); color: #fff; }
+    table { width: 100%; border-collapse: collapse; margin: 1rem 0; font-size: 0.95rem; }
+    th, td { border: 1px solid var(--border); padding: 0.6rem 0.85rem; text-align: center; }
+    th { background: #eaeef2; color: var(--accent); }
+    tr.true-row td { background: rgba(26, 127, 55, 0.08); }
+    tr.zero-row td { color: var(--muted); }
+    .num { font-family: "SF Mono", Menlo, monospace; color: var(--green); font-weight: 600; }
+    .step { display: flex; gap: 1rem; align-items: flex-start; margin: 1.25rem 0; }
+    .step-num { flex-shrink: 0; width: 2rem; height: 2rem; background: var(--accent); color: #fff; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 0.9rem; }
+    .step-body { flex: 1; }
+    .eq-block { margin: 0.75rem 0; overflow-x: auto; }
+    .arrow { color: var(--muted); margin: 0.25rem 0; font-size: 0.9rem; }
+    .takeaway { background: linear-gradient(135deg, #f0f7ff, #f6f8fa); border-left: 4px solid var(--green); padding: 1rem 1.25rem; margin: 1.5rem 0; border-radius: 0 8px 8px 0; }
+    nav { position: sticky; top: 0; background: rgba(255,255,255,0.92); backdrop-filter: blur(8px); padding: 0.75rem 0; margin-bottom: 1.5rem; border-bottom: 1px solid var(--border); z-index: 10; }
+    nav a { color: var(--muted); text-decoration: none; margin-right: 0.85rem; font-size: 0.82rem; }
+    nav a:hover { color: var(--accent); }
+    .legend { font-size: 0.88rem; color: var(--muted); margin-bottom: 1rem; }
+    .glossary td:last-child { text-align: left; font-size: 0.92rem; }
+    .flow-line { font-size: 0.9rem; color: var(--muted); padding: 0.75rem 1rem; background: #f0f3f6; border-radius: 8px; margin: 1rem 0; }
+  </style>
+</head>
+<body>
+
+<h1>Softmax · 交叉熵 · 梯度</h1>
+<p class="subtitle">从「训练要优化什么」出发 · 例子：{猫,狗,追}，真词=猫，$u$：猫2.0 狗1.0 追0.0</p>
+
+<p class="legend">🔵 约定 &nbsp; 🟡 推导 &nbsp; | &nbsp; 阅读顺序：<strong>loss → softmax 得 P → log P 变形 → 梯度</strong></p>
+
+<nav>
+  <a href="#glossary">词汇表</a>
+  <a href="#setup">例子</a>
+  <a href="#ce">① loss</a>
+  <a href="#softmax">② softmax</a>
+  <a href="#logp">③ log P</a>
+  <a href="#grad">④ 梯度</a>
+  <a href="#zloss">⑤ z-loss</a>
+  <a href="#qknorm">⑥ QK norm</a>
+  <a href="#why">附录</a>
+</nav>
+
+<!-- GLOSSARY slim -->
+<h2 id="glossary">词汇表（只记这些）</h2>
+<table class="glossary">
+  <tr><th>符号</th><th>一句话</th></tr>
+  <tr><td>$x$</td><td>上下文（已看过的 token）</td></tr>
+  <tr><td>$u_r$</td><td>logit，词 $r$ 的实数分数（还不是概率）</td></tr>
+  <tr><td>$P(r|x)$</td><td>下一个词是 $r$ 的概率，$\sum P = 1$</td></tr>
+  <tr><td>$Z$</td><td>$Z = e^{u_\text{猫}} + e^{u_\text{狗}} + e^{u_\text{追}}$，归一化分母</td></tr>
+  <tr><td>$y_r$</td><td>标签：真词=1，其余=0</td></tr>
+  <tr><td>$L$</td><td>loss，训练要最小化</td></tr>
+  <tr><td>$\log$</td><td>自然对数；loss 里出现 $\log P$</td></tr>
+</table>
+<div class="flow-line">主线：$u \xrightarrow{\text{softmax}} P \xrightarrow{\text{放进 loss}} L = -\sum y_r \log P(r|x)$</div>
+
+<!-- SETUP -->
+<h2 id="setup">固定例子</h2>
+<table>
+  <tr><th>词</th><th>logit $u_r$</th><th>标签 $y_r$</th></tr>
+  <tr class="true-row"><td>猫 ✓</td><td class="num">2.0</td><td class="num">1</td></tr>
+  <tr><td>狗</td><td class="num">1.0</td><td class="num">0</td></tr>
+  <tr><td>追</td><td class="num">0.0</td><td class="num">0</td></tr>
+</table>
+<p>$P$ 还没算——<strong>第 2 节 softmax 才算出来</strong>。全文 $\Sigma$ 都展开成猫+狗+追三项。</p>
+
+<!-- ========== 1. LOSS FIRST ========== -->
+<h2 id="ce">① 训练目标：交叉熵 loss（从问题出发）</h2>
+
+<div class="card convention">
+  <span class="tag conv">问题</span>
+  <p>语言模型每步预测下一个词。怎么衡量「猜得好不好」？</p>
+  <p>我们<strong>约定</strong>用交叉熵（标准做法，不是推导出来的）：</p>
+  <div class="eq-block">$$L = -\sum_{r \in \{\text{猫},\text{狗},\text{追}\}} y_r \cdot \log P(r|x)$$</div>
+</div>
+
+<div class="card derivation">
+  <span class="tag deriv">代入本例 · $\Sigma$ 三项全写</span>
+  <div class="eq-block">$$L = -\bigl[y_\text{猫}\log P(\text{猫}) + y_\text{狗}\log P(\text{狗}) + y_\text{追}\log P(\text{追})\bigr]$$</div>
+  <div class="eq-block">$$= -\bigl[1\cdot\log P(\text{猫}) + 0\cdot\log P(\text{狗}) + 0\cdot\log P(\text{追})\bigr]$$</div>
+  <div class="eq-block">$$= -\log P(\text{猫})$$</div>
+  <p class="arrow">狗、追在 $\Sigma$ 里<strong>写了</strong>，但 $y=0$ 乘掉；简写 $L=-\log P(\text{真词})$ 与上式<strong>等价</strong>。</p>
+</div>
+
+<div class="card highlight">
+  <span class="tag conv">错词算不算？</span>
+  <p><strong>标量 $L$</strong>：只剩 $-\log P(\text{猫})$。<strong>训练时</strong>：狗/追仍通过 $Z$ 和梯度 $\partial L/\partial u_\text{狗}=P(\text{狗})$ 被惩罚（见第 4 节）。</p>
+</div>
+
+<div class="card highlight">
+  <span class="tag conv">接下来缺什么？</span>
+  <ol>
+    <li>loss 里有 <strong>$P$</strong> → 第 ② 节：softmax 从 $u$ 算出 $P$</li>
+    <li>loss 里有 <strong>$\log P$</strong> → 第 ③ 节：把 $\log P$ 改写成 $u$ 和 $Z$（方便求导）</li>
+  </ol>
+</div>
+
+<!-- ========== 2. SOFTMAX ========== -->
+<h2 id="softmax">② $P$ 从哪来？Softmax</h2>
+
+<div class="card convention">
+  <span class="tag conv">约定 · softmax（到 $P$ 为止，<strong>没有 $\log$</strong>）</span>
+  <div class="eq-block">$$P(r|x) = \frac{e^{u_r}}{Z}, \qquad Z = e^{u_\text{猫}} + e^{u_\text{狗}} + e^{u_\text{追}}$$</div>
+  <p>模型输出 $u$；softmax 把 $u$ 变成概率 $P$。</p>
+</div>
+
+<div class="step"><div class="step-num">1</div><div class="step-body">
+  <div class="eq-block">$$Z = e^{2.0} + e^{1.0} + e^{0.0} = 7.39 + 2.72 + 1.00 = 11.11$$</div>
+</div></div>
+<div class="step"><div class="step-num">2</div><div class="step-body">
+  <div class="eq-block">$$P(\text{猫}) = 7.39/11.11 = 0.665,\quad P(\text{狗}) = 2.72/11.11 = 0.245,\quad P(\text{追}) = 1.00/11.11 = 0.090$$</div>
+  <p>验算：$0.665+0.245+0.090=1.000$ ✓</p>
+</div></div>
+<div class="step"><div class="step-num">3</div><div class="step-body">
+  <p>代回第 ① 节 loss：</p>
+  <div class="eq-block">$$L = -\log(0.665) \approx 0.408$$</div>
+</div></div>
+
+<!-- ========== 3. LOG P ========== -->
+<h2 id="logp">③ 因为 loss 里有 $\log P$：改写成 $u$ 和 $Z$</h2>
+
+<div class="card convention">
+  <span class="tag conv">动机（不是 softmax 定义的一部分）</span>
+  <p>第 ① 节 $L = -\log P(\text{猫})$。第 ② 节 $P = e^{u}/Z$。<strong>把两节接起来</strong>，对 $P$ 取 $\log$ 做代数变形，求导时更省事。</p>
+</div>
+
+<div class="card derivation">
+  <span class="tag deriv">推导 · 从 $P=e^{u}/Z$ 出发</span>
+  <h4>Step 1</h4>
+  <div class="eq-block">$$\log P(\text{猫}) = \log\left(\frac{e^{u_\text{猫}}}{Z}\right)$$</div>
+  <h4>Step 2 — $\log(a/b)=\log a - \log b$</h4>
+  <div class="eq-block">$$= \log(e^{u_\text{猫}}) - \log Z = u_\text{猫} - \log Z$$</div>
+  <p>对狗、追同理：$\log P(\text{狗}) = 1.0 - 2.407 = -1.407$，$\log P(\text{追}) = 0.0 - 2.407 = -2.407$（$\log Z = \log 11.11 \approx 2.407$）</p>
+</div>
+
+<div class="card derivation">
+  <span class="tag deriv">代回 loss · 两种写法等价</span>
+  <div class="eq-block">$$L = -\log P(\text{猫}) = -(u_\text{猫} - \log Z) = -u_\text{猫} + \log Z$$</div>
+  <div class="eq-block">$$= -2.0 + 2.407 = 0.407 \approx 0.408$$</div>
+</div>
+
+<!-- ========== 4. GRADIENT ========== -->
+<h2 id="grad">④ 梯度 $\partial L / \partial u_i$</h2>
+
+<div class="card derivation">
+  <span class="tag deriv">起点：$L = -u_\text{猫} + \log Z$，$Z = e^{u_\text{猫}} + e^{u_\text{狗}} + e^{u_\text{追}}$</span>
+
+  <h4>对 $u_\text{猫}$</h4>
+  <div class="eq-block">$$\frac{\partial L}{\partial u_\text{猫}} = -1 + \frac{e^{u_\text{猫}}}{Z} = P(\text{猫}) - 1 = 0.665 - 1 = -0.335$$</div>
+
+  <h4>对 $u_\text{狗}$（$-u_\text{猫}$ 不依赖 $u_\text{狗}$，只有 $\log Z$ 有贡献）</h4>
+  <div class="eq-block">$$\frac{\partial L}{\partial u_\text{狗}} = \frac{e^{u_\text{狗}}}{Z} = P(\text{狗}) = 0.245$$</div>
+
+  <h4>对 $u_\text{追}$</h4>
+  <div class="eq-block">$$\frac{\partial L}{\partial u_\text{追}} = P(\text{追}) = 0.090$$</div>
+</div>
+
+<div class="card highlight">
+  <span class="tag deriv">通式</span>
+  <div class="eq-block">$$\frac{\partial L}{\partial u_i} = P(i|x) - y_i$$</div>
+  <table>
+    <tr><th>词</th><th>$P-y$</th></tr>
+    <tr class="true-row"><td>猫</td><td class="num">−0.335</td></tr>
+    <tr><td>狗</td><td class="num">+0.245</td></tr>
+    <tr><td>追</td><td class="num">+0.090</td></tr>
+  </table>
+  <p>错词梯度非零 → <strong>第 ① 节说的「错词仍被惩罚」</strong>落在这里。</p>
+</div>
+
+<!-- ========== APPENDIX WHY ========== -->
+<h2 id="why">附录：为啥训练不用 argmax？</h2>
+<div class="card">
+  <p><strong>推理</strong>可 argmax。<strong>训练</strong>要每个词都有梯度：softmax 给狗 $P\approx0.245$，$\partial L/\partial u_\text{狗}>0$；argmax 几乎只更新赢家。</p>
+</div>
+
+<div class="takeaway">
+  <strong>全文链</strong>：约定 $L=-\sum y_r\log P$ → 约定 softmax 得 $P$ → 推导 $\log P=u-\log Z$ → 推导 $\partial L/\partial u_i = P-y$
+</div>
+
+<p style="color:var(--muted);font-size:0.85rem;margin-top:2rem;">CS336 · 面试常考：softmax+CE 梯度为何是 $P-y$；$e^u$ 溢出怎么办（减 max trick）</p>
+
+<!-- ========== Z-LOSS EXTENSION ========== -->
+<h2 id="zloss" style="margin-top:3rem;padding-top:2rem;border-top:2px solid var(--border);">⑤ 增量：z-loss（输出稳定性）</h2>
+
+<p class="subtitle" style="margin-bottom:1rem;">讲义 slide · 你已会手推 softmax+CE 后，<strong>多出来的部分</strong></p>
+
+<div class="card highlight">
+  <span class="tag conv">增量信息 · 一句话</span>
+  <p>在交叉熵之外，<strong>再加一项罚 $\log^2 Z$</strong>，逼 softmax 分母 $Z$ 别离 1 太远 → 大模型训练更稳。PaLM 叫 <strong>z-loss</strong>。</p>
+</div>
+
+<h3>你已经会的（复习，不是新内容）</h3>
+<div class="card">
+  <div class="eq-block">$$\log P(r|x) = u_r - \log Z(x)$$</div>
+  <div class="eq-block">$$Z(x) = \sum_{r'=1}^{|V|} e^{u_{r'}(x)} \quad\text{（本教程：猫+狗+追三项）}$$</div>
+  <p>主 loss 仍是交叉熵 / 负 log 似然：让 $\log P(\text{真词})$ 尽量大。</p>
+</div>
+
+<h3>新词</h3>
+<table class="glossary">
+  <tr><th>词</th><th>是什么</th></tr>
+  <tr><td><strong>z-loss</strong></td><td>辅助 loss，惩罚 $\log Z$ 太大（准确说：$\log^2 Z$）</td></tr>
+  <tr><td><strong>$\log Z$</strong></td><td>softmax 分母取 log；$Z$ 大 → $\log Z$ 大 → 数值容易不稳</td></tr>
+  <tr><td><strong>auxiliary loss</strong></td><td>辅助损失：叠在 CE 旁边，不取代 CE</td></tr>
+  <tr><td><strong>$\alpha$</strong></td><td>z-loss 权重；PaLM 用 $\alpha = 10^{-4}$</td></tr>
+  <tr><td><strong>stability</strong></td><td>训练不炸（loss/梯度/激活别 NaN、别飙飞）</td></tr>
+</table>
+
+<h3>新公式（slide + PaLM）</h3>
+<div class="card convention">
+  <span class="tag conv">约定 · 总 loss = 主 loss + 辅助项</span>
+  <p>讲义写法（对每个 token $i$ 求和）：</p>
+  <div class="eq-block">$$L_{\text{total}} = \sum_i \Bigl[\underbrace{\log P(x_i)}_{\text{主：越大越好}} - \underbrace{\alpha \cdot \log^2 Z(x_i)}_{\text{辅：惩罚 }\log Z \text{ 偏离 }0}\Bigr]$$</div>
+  <p>PaLM 单独记辅助项名字：</p>
+  <div class="eq-block">$$z\_\text{loss} = 10^{-4} \cdot \log^2 Z$$</div>
+  <p class="arrow">注意：slide 里主项写 $\log P$（最大化方向）；你教程里 CE 写 $L=-\log P$（最小化）。<strong>差一个负号</strong>，辅助项两边一致：都是「别让 $\log Z$ 乱飙」。</p>
+</div>
+
+<h3>为啥要罚 $\log Z$？（直觉）</h3>
+<div class="card">
+  <ul>
+    <li>$Z = \sum e^{u_r}$：某个 token 的 logits 整体太大 → $Z$ 爆炸 → $e^u$ 溢出、梯度怪异</li>
+    <li>罚 $\log^2 Z$ → 鼓励 <strong>$\log Z \approx 0$</strong> → <strong>$Z \approx 1$</strong></li>
+    <li>和 CE <strong>分工不同</strong>：CE 管「猜对词」；z-loss 管「logits 规模别失控」</li>
+    <li>和 weight decay <strong>无关</strong>：wd 罚权重；z-loss 罚 <strong>输出层 $\log Z$</strong></li>
+  </ul>
+</div>
+
+<h3>数字例子（接本教程）</h3>
+<div class="card derivation">
+  <span class="tag fact">代入</span>
+  <p>已算：$\log Z = \log(11.11) \approx 2.407$</p>
+  <div class="eq-block">$$\log^2 Z \approx 2.407^2 \approx 5.79$$</div>
+  <div class="eq-block">$$z\_\text{loss} = 10^{-4} \times 5.79 \approx 0.00058$$</div>
+  <p>相对 $L_{\text{CE}} \approx 0.408$，很小——<strong>轻轻拽</strong> $\log Z$ 往 0 靠。</p>
+  <p>若 logits 整体飙大，$Z=10^5$，$\log Z \approx 11.5$，$\log^2 Z \approx 132$，$z\_\text{loss} \approx 0.013$ → 罚得明显更重。</p>
+</div>
+
+<h3>和 CE 手推的关系</h3>
+<div class="card highlight">
+  <p><strong>手撕 CE</strong>：$P=e^u/Z$，$L=-\log P$，$\partial L/\partial u = P-y$ —— <strong>不变</strong>。</p>
+  <p><strong>z-loss 增量</strong>：多一项 $\alpha \log^2 Z$，反向传播时对每个 $u_r$ 多贡献一项与 $P(r)$ 有关的梯度（通过 $Z$）。面试浅层知道：<em>辅助项抑制 logits 整体尺度</em> 即可。</p>
+</div>
+
+<div class="takeaway">
+  <strong>谁在用</strong>：PaLM、Baichuan 2、DCLM、OLMo 2/3 等。<br>
+  <strong>记一句</strong>：CE 管对错；z-loss 管 $\log Z$ 别离 0 太远，防训练炸。
+</div>
+
+<p style="color:var(--muted);font-size:0.85rem;">导航：<a href="#ce">① loss</a> · <a href="#softmax">② softmax</a> · <a href="#logp">③ log P</a> · <a href="#grad">④ 梯度</a> · <strong>⑤ z-loss</strong></p>
+
+</body>
+</html>
