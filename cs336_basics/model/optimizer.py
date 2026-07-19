@@ -1,10 +1,61 @@
 from __future__ import annotations
 
 import math
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from typing import Optional
 
 import torch
+
+
+def get_lr_cosine_schedule(
+    it: int,
+    max_learning_rate: float,
+    min_learning_rate: float,
+    warmup_iters: int,
+    cosine_cycle_iters: int,
+) -> float:
+    """Cosine LR schedule with linear warmup (LLaMA-style).
+
+    - Warm-up (t < Tw): α_t = (t / Tw) * α_max
+    - Cosine (Tw ≤ t ≤ Tc): α_t = α_min + ½(1 + cos(π u))(α_max − α_min),
+      where u = (t − Tw) / (Tc − Tw)
+    - Post-annealing (t > Tc): α_t = α_min
+    """
+    if it < warmup_iters:
+        return (it / warmup_iters) * max_learning_rate
+    if it <= cosine_cycle_iters:
+        u = (it - warmup_iters) / (cosine_cycle_iters - warmup_iters)
+        return min_learning_rate + 0.5 * (1.0 + math.cos(math.pi * u)) * ( max_learning_rate - min_learning_rate)
+    return min_learning_rate
+
+
+def clip_gradients(
+    parameters: Iterable[torch.nn.Parameter],
+    max_l2_norm: float,
+    eps: float = 1e-6,
+) -> None:
+    """Clip combined parameter gradients to have ℓ₂-norm at most max_l2_norm.
+
+    If ‖g‖₂ ≤ M, leave grads unchanged; otherwise scale every grad in-place by
+    M / (‖g‖₂ + ε). Matches the assignment (ε = 10⁻⁶, PyTorch default).
+    """
+    grads = [p.grad for p in parameters if p.grad is not None]
+    if not grads:
+        return
+
+    # ‖g‖₂ = sqrt(sum over all grad tensors of ‖grad‖₂²)
+    # detach()：返回与 g 共享数据、但不挂在 autograd 图上的张量。
+    # 量范数只是读数做判断/算 scale，不该也不需要再对「范数本身」反传；
+    # 不 detach 的话，后面的 sqrt/sum 可能把计算图接上去，既浪费又可能干扰梯度。
+    total_norm = torch.sqrt(
+        sum(g.detach().float().norm(2).square() for g in grads)
+    )
+    if total_norm <= max_l2_norm:
+        return
+
+    scale = max_l2_norm / (total_norm + eps)
+    for g in grads:
+        g.mul_(scale)
 
 
 class AdamW(torch.optim.Optimizer):
