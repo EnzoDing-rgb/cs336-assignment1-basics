@@ -1,0 +1,44 @@
+# TinyStories smoke / small training run (CS336 A1).
+# Usage:
+#   uv run python -m cs336_basics.train --config configs/tinystories_small.yaml
+
+experiment_name: tinystories_small
+
+data:
+  train_path: artifacts/tinystories_tokens/tinystories_train.npy
+  valid_path: artifacts/tinystories_tokens/tinystories_valid.npy
+
+model:
+  vocab_size: 10000
+  context_length: 256
+  d_model: 512
+  num_layers: 4
+  num_heads: 16
+  # d_ff: omit → computed by compute_d_ff(d_model)
+  rope_theta: 10000.0
+
+optim:
+  lr_max: 3.0e-4
+  lr_min: 3.0e-5
+  weight_decay: 0.1
+  betas: [0.9, 0.95]
+  eps: 1.0e-8
+  warmup_iters: 1000
+  cosine_cycle_iters: 20000
+  grad_clip: 1.0
+
+train:
+  batch_size: 32
+  max_iters: 20000
+  eval_interval: 500
+  eval_batches: 20
+  checkpoint_interval: 2000
+  checkpoint_dir: artifacts/checkpoints/tinystories_small
+  resume_path: null
+  device: cuda:0
+  seed: 42
+
+logging:
+  log_interval: 10
+  wandb: false
+  wandb_project: cs336-a1

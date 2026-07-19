@@ -84,7 +84,7 @@ def run_swiglu(
     Returns:
         Float[Tensor, "... d_model"]: Output embeddings of the same shape as the input embeddings.
     """
-    from cs336_basics.model.language_model import SwiGLU
+    from cs336_basics.model.transformer import SwiGLU
 
     ffn = SwiGLU(d_model, d_ff, device=w1_weight.device, dtype=w1_weight.dtype)
     ffn.w1.weight.data = w1_weight
@@ -311,7 +311,7 @@ def run_transformer_block(
         Float[Tensor, "batch sequence_length d_model"] Tensor with the output of
         running the Transformer block on the input features while using RoPE.
     """
-    from cs336_basics.model.language_model import TransformerBlock
+    from cs336_basics.model.transformer import TransformerBlock
 
     block = TransformerBlock(
         d_model=d_model,
@@ -427,7 +427,7 @@ def run_transformer_lm(
         Float[Tensor, "batch_size sequence_length vocab_size"]: Tensor with the predicted unnormalized
         next-word distribution for each token.
     """
-    from cs336_basics.model.language_model import TransformerLM
+    from cs336_basics.model.transformer import TransformerLM
 
     model = TransformerLM(
         vocab_size=vocab_size,
@@ -521,7 +521,9 @@ def run_get_batch(
         is the sampled input sequences, and the second tuple item is the corresponding
         language modeling labels.
     """
-    raise NotImplementedError
+    from cs336_basics.data_loader import get_batch
+
+    return get_batch(dataset, batch_size, context_length, device)
 
 
 def run_softmax(in_features: Float[Tensor, " ..."], dim: int) -> Float[Tensor, " ..."]:
@@ -638,7 +640,9 @@ def run_save_checkpoint(
             we've completed.
         out (str | os.PathLike | BinaryIO | IO[bytes]): Path or file-like object to serialize the model, optimizer, and iteration to.
     """
-    raise NotImplementedError
+    from cs336_basics.checkpointing import save_checkpoint
+
+    save_checkpoint(model, optimizer, iteration, out)
 
 
 def run_load_checkpoint(
@@ -659,7 +663,9 @@ def run_load_checkpoint(
     Returns:
         int: the previously-serialized number of iterations.
     """
-    raise NotImplementedError
+    from cs336_basics.checkpointing import load_checkpoint
+
+    return load_checkpoint(src, model, optimizer)
 
 
 def get_tokenizer(

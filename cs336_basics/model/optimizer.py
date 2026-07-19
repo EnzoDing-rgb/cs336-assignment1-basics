@@ -34,25 +34,32 @@ def clip_gradients(
     max_l2_norm: float,
     eps: float = 1e-6,
 ) -> None:
-    """Clip combined parameter gradients to have ℓ₂-norm at most max_l2_norm.
+    """把全体参数的梯度原地缩小（如果合在一起范数超过 M）。
 
-    If ‖g‖₂ ≤ M, leave grads unchanged; otherwise scale every grad in-place by
-    M / (‖g‖₂ + ε). Matches the assignment (ε = 10⁻⁶, PyTorch default).
+    本质：不返回新梯度，也不新建一份 grad。
+    直接改每个 parameter.grad 里的数（in-place），函数返回 None。
+    优化器后面 step() 读到的就是裁过之后的梯度。
     """
+    # grads 里每个 g 就是某个 p.grad 本身（同一个张量对象），不是拷贝。
+    # 所以后面 g.mul_(...) 改的就是 parameter.grad。
     grads = [p.grad for p in parameters if p.grad is not None]
     if not grads:
         return
 
-    # ‖g‖₂ = sqrt(sum over all grad tensors of ‖grad‖₂²)
-    # detach()：返回与 g 共享数据、但不挂在 autograd 图上的张量。
-    # 量范数只是读数做判断/算 scale，不该也不需要再对「范数本身」反传；
-    # 不 detach 的话，后面的 sqrt/sum 可能把计算图接上去，既浪费又可能干扰梯度。
+    # 先量一下：所有 grad 摊平后的总长度 ‖g‖₂。
+    # detach()：量尺寸时先「断开」自动求导。
+    # 通俗讲：我们只是拿尺子量一下梯度有多大，用来决定要不要缩小；
+    # 量尺子这个动作本身不需要再被反传。detach 之后，PyTorch 就不会
+    # 把后面的 norm / sqrt 记进计算图里。
+    # （真正要改的梯度还是下面的 g；detach 只影响这次量范数用的那份视图。）
     total_norm = torch.sqrt(
         sum(g.detach().float().norm(2).square() for g in grads)
     )
     if total_norm <= max_l2_norm:
         return
 
+    # 超了上限：每个 grad 乘同一个 scale。mul_ 末尾的下划线 = 原地改。
+    # g 就是 p.grad，所以这就是 in-place 更新梯度。
     scale = max_l2_norm / (total_norm + eps)
     for g in grads:
         g.mul_(scale)
