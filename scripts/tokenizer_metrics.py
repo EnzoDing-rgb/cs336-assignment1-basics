@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""CS336 A1 tokenizer experiments: (a)–(d) metrics for reports/tokenization.md."""
+"""CS336 A1 tokenizer metrics (a)–(d) for reports/tokenizer_metrics.md."""
 
 from __future__ import annotations
 
@@ -140,7 +140,7 @@ def main() -> None:
     }
 
     print(SEP)
-    print("CS336 tokenizer_experiments.py results")
+    print("CS336 tokenizer_metrics.py results")
     print(SEP)
     print(json.dumps(out, indent=2))
     print(SEP)
