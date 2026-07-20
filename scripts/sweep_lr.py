@@ -35,6 +35,7 @@
 from __future__ import annotations
 
 import argparse
+import os
 import subprocess
 import sys
 from dataclasses import dataclass
@@ -82,10 +83,12 @@ SWEEP: list[LrRun] = [
 def build_cmd(run: LrRun) -> list[str]:
     name = f"tinystories_lr{run.tag}"
     ckpt = f"artifacts/checkpoints/{name}"
+    # -u：子进程 stdout 行缓冲，nohup 重定向时也能马上看到 iter 日志
     return [
         "uv",
         "run",
         "python",
+        "-u",
         "-m",
         "cs336_basics.train",
         "--config",
@@ -118,6 +121,10 @@ def print_table(rows: list[LrRun]) -> None:
 
 
 def main() -> None:
+    # 本脚本自己的 print 也立刻进 nohup 日志
+    sys.stdout.reconfigure(line_buffering=True)
+    sys.stderr.reconfigure(line_buffering=True)
+
     p = argparse.ArgumentParser(description="Sequential TinyStories LR sweep (7-point grid)")
     p.add_argument("--dry-run", action="store_true", help="只打印，不训练")
     p.add_argument("--only", type=str, default=None, help="只跑这些 tag，例：5.6e-4,3.2e-3")
@@ -129,9 +136,9 @@ def main() -> None:
     args = p.parse_args()
     only = parse_only(args.only)
 
-    print("=" * 72)
-    print("LR sweep：7 档总表（已有标出；默认只跑待跑）")
-    print("=" * 72)
+    print("=" * 72, flush=True)
+    print("LR sweep：7 档总表（已有标出；默认只跑待跑）", flush=True)
+    print("=" * 72, flush=True)
     print_table(SWEEP)
 
     selected = [r for r in SWEEP if only is None or r.tag in only]
@@ -145,25 +152,26 @@ def main() -> None:
     skipped = [r for r in selected if r.already_done and not args.include_existing]
 
     if skipped:
-        print(f"\n跳过已有 {len(skipped)} 档: {[r.tag for r in skipped]}")
+        print(f"\n跳过已有 {len(skipped)} 档: {[r.tag for r in skipped]}", flush=True)
     if not to_run:
-        print("没有需要新跑的档（试试 --include-existing）")
+        print("没有需要新跑的档（试试 --include-existing）", flush=True)
         return
 
-    print(f"\n将顺序执行 {len(to_run)} 档（单卡，约 {len(to_run)}×30–35min）:\n")
+    print(f"\n将顺序执行 {len(to_run)} 档（单卡，约 {len(to_run)}×30–35min）:\n", flush=True)
+    child_env = {**os.environ, "PYTHONUNBUFFERED": "1"}
     for i, run in enumerate(to_run, 1):
         cmd = build_cmd(run)
-        print(f"[{i}/{len(to_run)}] lr_max={run.lr_max:g}  ({run.role})")
-        print(" ", " ".join(cmd))
+        print(f"[{i}/{len(to_run)}] lr_max={run.lr_max:g}  ({run.role})", flush=True)
+        print(" ", " ".join(cmd), flush=True)
         if args.dry_run:
             continue
-        result = subprocess.run(cmd, cwd=ROOT)
-        print(f"[{i}/{len(to_run)}] exit_code={result.returncode}")
+        result = subprocess.run(cmd, cwd=ROOT, env=child_env)
+        print(f"[{i}/{len(to_run)}] exit_code={result.returncode}", flush=True)
 
-    print("\n对比曲线:")
-    print("  已有: artifacts/checkpoints/tinystories_small/20260720_1436/curves/")
-    print("  新跑: artifacts/checkpoints/tinystories_lr*/**/curves/")
-    print("  日志: reports/experiment_log.md")
+    print("\n对比曲线:", flush=True)
+    print("  已有: artifacts/checkpoints/tinystories_small/20260720_1436/curves/", flush=True)
+    print("  新跑: artifacts/checkpoints/tinystories_lr*/**/curves/", flush=True)
+    print("  日志: reports/experiment_log.md", flush=True)
 
 
 if __name__ == "__main__":
