@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""CS336 A1 tokenizer experiments: (a)–(d) metrics for reports/tokenizer_experiments.md."""
+"""CS336 A1 tokenizer experiments: (a)–(d) metrics for reports/tokenization.md."""
 
 from __future__ import annotations
 
