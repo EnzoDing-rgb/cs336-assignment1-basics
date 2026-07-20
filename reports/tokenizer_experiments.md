@@ -18,13 +18,10 @@
 复制**一整行**到终端（`&&` 连接，无 multiline）：
 
 ```bash
-cd /root/.dev/ml-sys/cs336/assignment1-basics && uv run python /root/.dev/ml-sys/cs336/assignment1-basics/scripts/tokenizer_experiments.py | tee /root/.dev/ml-sys/cs336/assignment1-basics/reports/tokenizer_experiments_last_run.txt
+cd /root/.dev/ml-sys/cs336/assignment1-basics && uv run python scripts/tokenizer_experiments.py
 ```
 
-跑完后打开 **`/root/.dev/ml-sys/cs336/assignment1-basics/reports/tokenizer_experiments_last_run.txt`**，里面有：
-
-- (a)(b)(c) 的数字 JSON + 人类可读摘要  
-- (d) 四个 `.npy` 的 `dtype`、`len`、`max_id`、**前 10 / 后 10 个 token id**  
+终端会打印 (a)(b)(c)(d) 的 JSON + 摘要。本文件 **附录 C** 归档了 2026-07-20 一次完整原始输出（原 `tokenizer_experiments_last_run.txt`，已并入此处）。
 
 可选：只看 BPE 产物是否在（不跑 Python）：
 
@@ -120,7 +117,7 @@ cat /root/.dev/ml-sys/cs336/assignment1-basics/artifacts/owt_bpe/profile_report.
 # Part II — tokenizer_experiments (a)–(d)
 
 > **本文档定位**：学习笔记，不是「交作业一句话」。每一问都写清：**在算什么 → 为什么这样算 → 我跑出来的数 → 你怎么自己复现**。  
-> **数据来源**：2026-07-20 在本机重新跑了 §0 一键命令；`.npy` 落盘文件存在（OWT train 约 5.1 GiB，2026-07-19 生成）。下文数字与 `reports/tokenizer_experiments_last_run.txt` 一致。
+> **数据来源**：2026-07-20 在本机重新跑了 §0 一键命令；`.npy` 落盘文件存在（OWT train 约 5.1 GiB，2026-07-19 生成）。下文数字与 **附录 C** 原始输出一致。
 
 ---
 
@@ -556,8 +553,177 @@ data/*.txt
 | 用途 | 路径 |
 |------|------|
 | (a)(b)(c)(d) 汇总脚本 | `scripts/tokenizer_experiments.py` |
-| 最近一次完整输出 | `reports/tokenizer_experiments_last_run.txt` |
+| 一次完整原始输出（归档） | 本文件 **附录 C** |
 | BPE 训练 CLI | `python -m cs336_basics.tokenization.train_bpe` |
 | 全量 encode CLI | `python -m cs336_basics.tokenization.encode_dataset` |
 | Tokenizer 实现 | `cs336_basics/tokenization/tokenizer.py` |
+
+---
+
+## 附录 C：实验记录（原始脚本输出，2026-07-20）
+
+以下内容由 `scripts/tokenizer_experiments.py` 打印，原封归档（原独立文件 `tokenizer_experiments_last_run.txt` 已删除并入此处）。
+
+```text
+========================================================================
+CS336 tokenizer_experiments.py results
+========================================================================
+{
+  "a": {
+    "tinystories_bytes_per_token": 4.112278761061947,
+    "tinystories_sample_bytes": 7435,
+    "tinystories_sample_tokens": 1808,
+    "owt_bytes_per_token": 4.691150178784267,
+    "owt_sample_bytes": 31487,
+    "owt_sample_tokens": 6712
+  },
+  "b": {
+    "owt_sample_with_tinystories_tok_bytes_per_token": 3.1892028765319558,
+    "owt_sample_tokens_with_tinystories_tok": 9873,
+    "owt_sample_with_owt_tok_bytes_per_token": 4.691150178784267,
+    "ratio_worse_than_matched": 0.679833890408184
+  },
+  "c": {
+    "bench_chunk_mib": 1.908172607421875,
+    "tinystories_tok_bytes_per_sec": 1337021.7581524993,
+    "owt_tok_bytes_per_sec": 1320033.9171077928,
+    "pile_gb": 825.0,
+    "pile_hours_tinystories_tok": 184.04026199744212,
+    "pile_hours_owt_tok": 186.40872138028035
+  },
+  "d": {
+    "tinystories_train": {
+      "path": "/root/.dev/ml-sys/cs336/assignment1-basics/artifacts/tinystories_tokens/tinystories_train.npy",
+      "dtype": "uint16",
+      "len": 540796778,
+      "max_id": 9999,
+      "first10": [
+        199,
+        430,
+        439,
+        259,
+        398,
+        401,
+        283,
+        259,
+        390,
+        496
+      ],
+      "last10": [
+        364,
+        2412,
+        474,
+        14,
+        339,
+        324,
+        12,
+        317,
+        57,
+        79
+      ],
+      "size_gb": 1.0073126144707203
+    },
+    "tinystories_valid": {
+      "path": "/root/.dev/ml-sys/cs336/assignment1-basics/artifacts/tinystories_tokens/tinystories_valid.npy",
+      "dtype": "uint16",
+      "len": 5461210,
+      "max_id": 9999,
+      "first10": [
+        85,
+        862,
+        492,
+        499,
+        266,
+        322,
+        608,
+        370,
+        263,
+        911
+      ],
+      "last10": [
+        336,
+        411,
+        2412,
+        263,
+        4301,
+        267,
+        405,
+        378,
+        376,
+        14
+      ],
+      "size_gb": 0.010172415524721146
+    },
+    "owt_train": {
+      "path": "/root/.dev/ml-sys/cs336/assignment1-basics/artifacts/owt_tokens/owt_train.npy",
+      "dtype": "uint16",
+      "len": 2727120452,
+      "max_id": 31999,
+      "first10": [
+        2001,
+        3384,
+        696,
+        361,
+        473,
+        284,
+        3890,
+        2046,
+        361,
+        1880
+      ],
+      "last10": [
+        3103,
+        288,
+        8304,
+        294,
+        548,
+        2693,
+        29983,
+        6956,
+        14,
+        0
+      ],
+      "size_gb": 5.0796578004956245
+    },
+    "owt_valid": {
+      "path": "/root/.dev/ml-sys/cs336/assignment1-basics/artifacts/owt_tokens/owt_valid.npy",
+      "dtype": "uint16",
+      "len": 66401098,
+      "max_id": 31999,
+      "first10": [
+        44,
+        4092,
+        2148,
+        54,
+        4192,
+        5351,
+        12,
+        11970,
+        14,
+        746
+      ],
+      "last10": [
+        19167,
+        317,
+        480,
+        975,
+        1268,
+        318,
+        2467,
+        384,
+        720,
+        0
+      ],
+      "size_gb": 0.12368180230259895
+    }
+  }
+}
+========================================================================
+(a) TinyStories sample, TS 10k tok: 4.112 bytes/token (7435 bytes / 1808 tokens)
+(a) OWT sample, OWT 32k tok:        4.691 bytes/token (31487 bytes / 6712 tokens)
+(b) OWT sample, TS 10k tok:           3.189 bytes/token (9873 tokens); 1.47x more tokens than matched OWT tok
+(c) throughput TS tok: 1.28 MiB/s | OWT tok: 1.26 MiB/s
+(c) Pile 825 GiB estimate: TS tok 184.0 h | OWT tok 186.4 h
+(d) see encoded .npy max_id vs uint16; files under artifacts/*_tokens/
+```
 

@@ -1,0 +1,43 @@
+# GPU smoke run: verify metrics.csv + loss curves in tens of seconds.
+#   uv run python -m cs336_basics.train --config configs/tinystories_smoke.yaml
+# Artifacts land under artifacts/checkpoints/tinystories_smoke/<YYYYMMDD_HHMM>/
+
+experiment_name: tinystories_smoke
+
+data:
+  train_path: artifacts/tinystories_tokens/tinystories_train.npy
+  valid_path: artifacts/tinystories_tokens/tinystories_valid.npy
+
+model:
+  vocab_size: 10000
+  context_length: 256
+  d_model: 512
+  num_layers: 4
+  num_heads: 16
+  rope_theta: 10000.0
+
+optim:
+  lr_max: 3.0e-4
+  lr_min: 3.0e-5
+  weight_decay: 0.1
+  betas: [0.9, 0.95]
+  eps: 1.0e-8
+  warmup_iters: 5
+  cosine_cycle_iters: 20
+  grad_clip: 1.0
+
+train:
+  batch_size: 8
+  max_iters: 20
+  eval_interval: 5
+  eval_batches: 2
+  checkpoint_interval: 20
+  checkpoint_dir: artifacts/checkpoints/tinystories_smoke
+  resume_path: null
+  device: cuda:0
+  seed: 42
+
+logging:
+  log_interval: 1
+  wandb: false
+  wandb_project: cs336-a1

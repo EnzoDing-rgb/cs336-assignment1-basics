@@ -11,6 +11,7 @@ import argparse
 import dataclasses
 import json
 import random
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -21,6 +22,7 @@ import yaml
 
 from cs336_basics.checkpointing import load_checkpoint, save_checkpoint
 from cs336_basics.data_loader import get_batch
+from cs336_basics.logging import RunLogger, make_run_dir
 from cs336_basics.model.normalization import cross_entropy
 from cs336_basics.model.optimizer import AdamW, clip_gradients, get_lr_cosine_schedule
 from cs336_basics.model.transformer import TransformerLM, compute_d_ff
@@ -339,12 +341,14 @@ def main(argv: list[str] | None = None) -> None:
     cfg = load_config(args.config, overrides=args.override)
     set_seed(cfg.train.seed)
 
-    ckpt_dir = Path(cfg.train.checkpoint_dir)
-    ckpt_dir.mkdir(parents=True, exist_ok=True)
-    # 把本次 run 实际生效的配置落在 checkpoint 目录（含 --override），方便对着 .pt 复现。
-    # 入口仍是 --config configs/...；这里的 run_config.yaml 只是快照，不要用来启动训练。
-    with open(ckpt_dir / "run_config.yaml", "w", encoding="utf-8") as f:
+    # 每次 run：checkpoint_dir / YYYYMMDD_HHMM/ （到分钟；同分钟冲突则 _2）
+    # 例：artifacts/checkpoints/tinystories_smoke/20260720_1419/
+    run_dir = make_run_dir(cfg.train.checkpoint_dir)
+    logger = RunLogger.create(run_dir)
+    # 入口仍是 --config configs/...；run_config.yaml 是快照，不要用来启动训练。
+    with open(run_dir / "run_config.yaml", "w", encoding="utf-8") as f:
         yaml.safe_dump(config_to_dict(cfg), f, sort_keys=False)
+    print(f"[run] dir={run_dir}")
 
     train_data = open_memmap_dataset(cfg.data.train_path)
     valid_data = open_memmap_dataset(cfg.data.valid_path)
@@ -368,40 +372,53 @@ def main(argv: list[str] | None = None) -> None:
 
     model.to(cfg.train.device)
     print(f"[train] device={cfg.train.device} max_iters={cfg.train.max_iters} start={start_iter}")
+    # 墙钟从训练循环起算（不含建模型/读数据），曲线横轴才有意义
+    logger.t0 = time.perf_counter()
 
-    for it in range(start_iter, cfg.train.max_iters):
-        loss = train_step(model, optimizer, train_data, cfg, iteration=it)
+    try:
+        for it in range(start_iter, cfg.train.max_iters):
+            # loss: Python float，本 step 的 CE。例：9.2413
+            loss = train_step(model, optimizer, train_data, cfg, iteration=it)
 
-        if it % cfg.logging.log_interval == 0:
-            lr = optimizer.param_groups[0]["lr"]
-            print(f"iter {it:6d}  train_loss={loss:.4f}  lr={lr:.6e}")
-            if use_wandb:
-                import wandb
+            if it % cfg.logging.log_interval == 0:
+                lr = optimizer.param_groups[0]["lr"]
+                print(f"iter {it:6d}  train_loss={loss:.4f}  lr={lr:.6e}  wall={logger.wall_s():.1f}s")
+                # → metrics.csv 一行 train；例 step=0, train_loss=9.24, lr=0
+                logger.log_train(it, loss, lr)
+                if use_wandb:
+                    import wandb
 
-                wandb.log({"train/loss": loss, "train/lr": lr, "iter": it}, step=it)
+                    wandb.log({"train/loss": loss, "train/lr": lr, "iter": it}, step=it)
 
-        if it > 0 and it % cfg.train.eval_interval == 0:
-            val_loss = evaluate(model, valid_data, cfg)
-            print(f"iter {it:6d}  valid_loss={val_loss:.4f}")
-            if use_wandb:
-                import wandb
+            if it > 0 and it % cfg.train.eval_interval == 0:
+                # val_loss: 验证集若干 batch 平均 CE。例：8.4361
+                val_loss = evaluate(model, valid_data, cfg)
+                print(f"iter {it:6d}  valid_loss={val_loss:.4f}  wall={logger.wall_s():.1f}s")
+                # → metrics.csv 一行 valid（同 step 可有 train+valid 两行）
+                logger.log_valid(it, val_loss)
+                if use_wandb:
+                    import wandb
 
-                wandb.log({"valid/loss": val_loss, "iter": it}, step=it)
+                    wandb.log({"valid/loss": val_loss, "iter": it}, step=it)
 
-        if it > 0 and it % cfg.train.checkpoint_interval == 0:
-            out = ckpt_dir / f"ckpt_iter{it}.pt"
-            # 存「已完成」的步数：下一轮从 it+1 接着训
-            save_checkpoint(model, optimizer, iteration=it + 1, out=out)
-            print(f"[ckpt] wrote {out}")
+            if it > 0 and it % cfg.train.checkpoint_interval == 0:
+                out = run_dir / f"ckpt_iter{it}.pt"
+                # 存「已完成」的步数：下一轮从 it+1 接着训
+                save_checkpoint(model, optimizer, iteration=it + 1, out=out)
+                print(f"[ckpt] wrote {out}")
 
-    # final checkpoint
-    final_path = ckpt_dir / f"ckpt_iter{cfg.train.max_iters}.pt"
-    save_checkpoint(model, optimizer, iteration=cfg.train.max_iters, out=final_path)
-    print(f"[done] final checkpoint {final_path}")
-    if use_wandb:
-        import wandb
+        # final checkpoint
+        final_path = run_dir / f"ckpt_iter{cfg.train.max_iters}.pt"
+        save_checkpoint(model, optimizer, iteration=cfg.train.max_iters, out=final_path)
+        print(f"[done] final checkpoint {final_path}")
+    finally:
+        # 画 curves/*.png，并往 reports/experiment_log.md 追加一小节事实
+        logger.finalize(experiment_name=cfg.experiment_name)
+        logger.close()
+        if use_wandb:
+            import wandb
 
-        wandb.finish()
+            wandb.finish()
 
 
 if __name__ == "__main__":
