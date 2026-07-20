@@ -2,29 +2,29 @@
 """TinyStories learning-rate sweep（作业 learning_rate / edge of stability）.
 
 ================================================================================
-总表（7 档，等比；只改 lr 高峰高度，其余与 tinystories_small.yaml 相同）
+总表（7 档；只改 lr 高峰，其余与 tinystories_small.yaml 相同）
 
 锁死不变：
-  - 先 warmup 爬到 lr_max，再 cosine 降到 lr_min（lr_min = lr_max/10）
+  - warmup 爬到 lr_max，再 cosine 降到 lr_min（lr_min = lr_max/10）
   - weight_decay=0.1、betas、warmup 步数、max_iters=20000、模型与数据
   - 自变量：仅 lr_max（及成比例的 lr_min）
 
-  tag      lr_max    lr_min     角色                         状态
-  ------   --------  ---------  ---------------------------  ----------
-  1e-4     1e-4      1e-5       偏小、稳、loss 可能偏高         待跑
-  1.8e-4   1.8e-4    1.8e-5     偏小                          待跑
-  3.2e-4   3.2e-4    3.2e-5     近中段（用 3e-4 近似）         已有※
-  5.6e-4   5.6e-4    5.6e-5     冲 valid≤1.45                 待跑
-  1e-3     1e-3      1e-4       更猛，可能接近最佳               待跑
-  1.8e-3   1.8e-3    1.8e-4     贴边 / 可能不稳                 待跑
-  3.2e-3   3.2e-3    3.2e-4     预期发散（edge 外侧）           待跑
+  tag      lr_max    lr_min     角色                      状态
+  ------   --------  ---------  ------------------------  ------
+  1e-4     1e-4      1e-5       偏小、稳、loss 可能偏高      待跑
+  1.8e-4   1.8e-4    1.8e-5     偏小                       待跑
+  3e-4     3e-4      3e-5       中段                       已有
+  5.6e-4   5.6e-4    5.6e-5     冲 valid≤1.45              待跑
+  1e-3     1e-3      1e-4       更猛，可能接近最佳            待跑
+  1.8e-3   1.8e-3    1.8e-4     贴边 / 可能不稳              待跑
+  3.2e-3   3.2e-3    3.2e-4     预期发散（edge 外侧）        待跑
 
-※ 已有 = 复用 artifacts/checkpoints/tinystories_small/20260720_1436/
-    （yaml 里 lr_max=3e-4 ≈ 本表 3.2e-4；final valid≈1.53）
-    默认跳过，不重跑。若要 7 次全新建：加 --include-existing
+已有 = artifacts/checkpoints/tinystories_small/20260720_1436/
+       （就是 lr_max=3e-4 那次；final valid≈1.53）
+       默认跳过不重跑。要重跑该档：--include-existing
 ================================================================================
 
-单卡顺序跑（约 6×30–35min）。Usage（repo root）：
+单卡顺序跑。Usage（repo root）：
 
   uv run python scripts/sweep_lr.py
   uv run python scripts/sweep_lr.py --dry-run
@@ -58,19 +58,17 @@ class LrRun:
     lr_min: float
     role: str
     already_done: bool = False
-    # 已有 run 的目录（仅 already_done=True 时有意义）
     existing_run_dir: str | None = None
 
 
-# 一张总表：已有与待跑放一起；已有用 already_done=True
 SWEEP: list[LrRun] = [
     LrRun("1e-4", 1e-4, 1e-5, "偏小、稳、loss 可能偏高"),
     LrRun("1.8e-4", 1.8e-4, 1.8e-5, "偏小"),
     LrRun(
-        "3.2e-4",
-        3.2e-4,
-        3.2e-5,
-        "近中段（≈已跑 3e-4）",
+        "3e-4",
+        3e-4,
+        3e-5,
+        "中段",
         already_done=True,
         existing_run_dir="artifacts/checkpoints/tinystories_small/20260720_1436",
     ),
@@ -82,7 +80,6 @@ SWEEP: list[LrRun] = [
 
 
 def build_cmd(run: LrRun) -> list[str]:
-    """构造 train 命令 list。"""
     name = f"tinystories_lr{run.tag}"
     ckpt = f"artifacts/checkpoints/{name}"
     return [
@@ -127,7 +124,7 @@ def main() -> None:
     p.add_argument(
         "--include-existing",
         action="store_true",
-        help="连「已有」那档也重跑（默认跳过）",
+        help="连「已有」3e-4 也重跑（默认跳过）",
     )
     args = p.parse_args()
     only = parse_only(args.only)
