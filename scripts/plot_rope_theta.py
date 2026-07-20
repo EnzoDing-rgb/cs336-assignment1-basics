@@ -10,7 +10,9 @@ from matplotlib.gridspec import GridSpec
 
 THETA = 10_000.0
 D_K = 64
-OUT = Path(__file__).resolve().parent / "rope_theta_trend.png"
+# 图产物进 artifacts/，不和脚本混放
+# 例：.../artifacts/plots/rope_theta_trend.png
+OUT = Path(__file__).resolve().parents[1] / "artifacts" / "plots" / "rope_theta_trend.png"
 
 
 def rope_angle(pos: np.ndarray, k: np.ndarray) -> np.ndarray:
@@ -105,6 +107,7 @@ def main() -> None:
     wrap=False,
   )
 
+  OUT.parent.mkdir(parents=True, exist_ok=True)
   fig.savefig(OUT, dpi=160, bbox_inches="tight")
   plt.close(fig)
   print(f"wrote {OUT}")
