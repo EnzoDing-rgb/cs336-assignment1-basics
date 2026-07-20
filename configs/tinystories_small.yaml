@@ -1,6 +1,7 @@
 # TinyStories smoke / small training run (CS336 A1).
-# Usage:
+# Usage (single entry point — edit THIS file, not checkpoint snapshots):
 #   uv run python -m cs336_basics.train --config configs/tinystories_small.yaml
+# After a run, see artifacts/checkpoints/tinystories_small/run_config.yaml for what actually ran.
 
 experiment_name: tinystories_small
 

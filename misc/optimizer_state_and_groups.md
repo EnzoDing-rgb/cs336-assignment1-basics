@@ -310,7 +310,7 @@ class SGD(torch.optim.Optimizer):
 3. `state["t"]` 如何读写；
 4. 更新式如何对应讲义式 20。
 
-可运行玩具实验见 `misc/run_lr_tuning_toy.py`（比较不同 `lr` 下损失衰减 / 发散）。
+可运行玩具实验见 `scripts/run_lr_tuning_toy.py`（比较不同 `lr` 下损失衰减 / 发散）。
 
 ---
 

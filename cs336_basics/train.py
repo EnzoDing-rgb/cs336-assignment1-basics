@@ -341,8 +341,9 @@ def main(argv: list[str] | None = None) -> None:
 
     ckpt_dir = Path(cfg.train.checkpoint_dir)
     ckpt_dir.mkdir(parents=True, exist_ok=True)
-    # 工业界习惯：把本次生效的 config 落在 checkpoint 目录，方便复现
-    with open(ckpt_dir / "config.yaml", "w", encoding="utf-8") as f:
+    # 把本次 run 实际生效的配置落在 checkpoint 目录（含 --override），方便对着 .pt 复现。
+    # 入口仍是 --config configs/...；这里的 run_config.yaml 只是快照，不要用来启动训练。
+    with open(ckpt_dir / "run_config.yaml", "w", encoding="utf-8") as f:
         yaml.safe_dump(config_to_dict(cfg), f, sort_keys=False)
 
     train_data = open_memmap_dataset(cfg.data.train_path)

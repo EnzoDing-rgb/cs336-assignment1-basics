@@ -6,7 +6,7 @@ see decay vs divergence.
 
 Usage (from repo root):
 
-  uv run python misc/run_lr_tuning_toy.py
+  uv run python scripts/run_lr_tuning_toy.py
 """
 
 from __future__ import annotations
