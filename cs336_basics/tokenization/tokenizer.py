@@ -1,3 +1,64 @@
+"""Byte-level BPE tokenizer: str ↔ list[int]。
+
+══════════════════════════════════════════════════════════════════════════════
+整个文件在干什么（一句话）
+══════════════════════════════════════════════════════════════════════════════
+  encode:  "Hi there"  →  [123, 456, ...]     # 给 LM 吃的整数序列
+  decode:  [123, 456]  →  "Hi there"         # 给人看的字符串
+
+  中间靠两样东西：
+    vocab  {0: b'!', 257: b' the', ...}       # id ↔ 这个 token 的原始 bytes
+    merges [(b'h',b'i'), (b' t',b'he'), ...]   # BPE 训练时学到的「相邻 bytes 怎么并」
+
+══════════════════════════════════════════════════════════════════════════════
+调用关系（谁调谁）
+══════════════════════════════════════════════════════════════════════════════
+
+  构造阶段（只做一次）：
+    Tokenizer.from_files("vocab.json", "merges.txt")
+      → _load_vocab_from_json   # json → dict[int, bytes]
+      → _load_merges_from_text  # merges.txt → list[tuple[bytes, bytes]]
+      → Tokenizer.__init__      # 建 _bytes_to_id、_merge_rank 查表
+
+  encode 方向（text → ids）：
+    encode("Hi<|endoftext|>there")
+      → split_text_on_special_tokens     # 按 special 切开
+      → 普通片段: pre_tokenize (utils)   # 正则切成 pretoken
+      → 每个 pretoken: _encode_pretoken  # 单字节 → BPE merge → 查 id
+      → special 片段: 直接 _bytes_to_id
+
+  decode 方向（ids → text）：
+    decode([123, 456])
+      → vocab[123], vocab[456] 拼成 b'...'
+      → .decode("utf-8")
+
+  大文件（边读边吐 id，不一次 load 全文）：
+    encode_iterable(open("corpus.txt"))  → 内部反复调 encode(一行)
+
+══════════════════════════════════════════════════════════════════════════════
+数据流例子：encode("Hi there")（数字是示意，逻辑不变）
+══════════════════════════════════════════════════════════════════════════════
+
+  "Hi there"
+       │ split_text_on_special_tokens（无 special 时整段是一个 piece）
+       ▼
+  piece = "Hi there"
+       │ pre_tokenize
+       ▼
+  pretokens = ["Hi", " there"]     # 空格粘在下一个词前面，GPT-2 惯例
+       │
+       ├─ "Hi"  → _encode_pretoken
+       │            [b'H',b'i'] → merge → [b'Hi'] → id 17250
+       │
+       └─ " there" → _encode_pretoken
+                     [b' ',b't',b'h',b'e',b'r',b'e'] → merge → [b' there'] → id 994
+       ▼
+  ids = [17250, 994]
+
+  decode([17250, 994]):
+    vocab[17250]=b'Hi'  +  vocab[994]=b' there'  →  b'Hi there'  →  "Hi there"
+"""
+
 from __future__ import annotations
 
 import json
@@ -20,16 +81,26 @@ class Tokenizer:
         merges: list[tuple[bytes, bytes]],
         special_tokens: list[str] | None = None,
     ) -> None:
+        """构造查表，之后 encode/decode 都走这些表。
+
+        输入例:
+          vocab  = {0: b'<|endoftext|>', 1: b'!', 257: b' the'}
+          merges = [(b'h', b'i'), (b' t', b'he')]
+          special_tokens = ['<|endoftext|>']
+
+        输出（挂在 self 上）:
+          self.vocab         同上，若 special 不在 vocab 里会 append 新 id
+          self._bytes_to_id  {b'!': 1, b' the': 257, b'<|endoftext|>': 0}
+          self._merge_rank   {(b'h', b'i'): 0, (b' t', b'he'): 1}  # 越小越先 merge
+        """
         self.vocab = dict(vocab)
         self.merges = merges
         self.special_tokens = list(special_tokens or [])
 
-        # bytes -> id，encode 最后查表用
         self._bytes_to_id: dict[bytes, int] = {
             token_bytes: token_id for token_id, token_bytes in self.vocab.items()
         }
 
-        # 作业要求：special token 不在 vocab 里就 append
         for special in self.special_tokens:
             special_bytes = special.encode("utf-8")
             if special_bytes not in self._bytes_to_id:
@@ -39,10 +110,6 @@ class Tokenizer:
 
         self._special_token_set = set(self.special_tokens)
 
-        # merge_rank: pair -> 它在 merges 列表里的下标（越小 = 越早学到 = 越优先合并）
-        # 例: merges = [(b't', b'h'), (b'th', b'e'), (b'a', b'b')]
-        #   -> merge_rank = {(b't', b'h'): 0, (b'th', b'e'): 1, (b'a', b'b'): 2}
-        # 后面 encode 时用这个表，避免每次把 5 万条 merges 全扫一遍
         self._merge_rank: dict[tuple[bytes, bytes], int] = {
             pair: rank for rank, pair in enumerate(self.merges)
         }
@@ -54,8 +121,23 @@ class Tokenizer:
         merges_filepath: str,
         special_tokens: list[str] | None = None,
     ) -> Tokenizer:
-        # @classmethod：第一个参数是类本身（这里就是 Tokenizer），不是实例
-        # return tokenizer_class(...) 等价于 return Tokenizer(...)
+        """从磁盘文件构造 Tokenizer。
+
+        输入例:
+          vocab_filepath  = "artifacts/vocab.json"
+          merges_filepath = "artifacts/merges.txt"
+          special_tokens  = ["<|endoftext|>"]
+
+        输出例:
+          Tokenizer 实例（内部 vocab/merges 已填好，可直接 .encode/.decode）
+
+        数据流:
+          vocab.json  {"257": "Ġthe", "!": 1, ...}
+            → _load_vocab_from_json → {257: b' the', 1: b'!', ...}
+          merges.txt  两行 "h e" / "Ġt he"
+            → _load_merges_from_text → [(b'h', b'e'), (b' t', b'he')]
+          → Tokenizer.__init__(vocab, merges, special_tokens)
+        """
         with open(vocab_filepath, encoding="utf-8") as f:
             raw_vocab = json.load(f)
         vocab = _load_vocab_from_json(raw_vocab)
@@ -65,9 +147,23 @@ class Tokenizer:
         return tokenizer_class(vocab, merges, special_tokens)
 
     def encode(self, text: str) -> list[int]:
-        # 例: text='Hello<|endoftext|>world' + special_tokens=['<|endoftext|>']
-        #   -> pieces=['Hello', '<|endoftext|>', 'world']
-        #   -> Hello/world 走 pre-tokenize + BPE；special 整段查 id
+        """整段文本 → token id 列表。
+
+        输入例:
+          text = "Hi<|endoftext|>there"
+          special_tokens = ["<|endoftext|>"]
+
+        输出例:
+          [17250, 50256, 258]    # Hi | <|endoftext|> | there（数字仅示意）
+
+        数据流:
+          "Hi<|endoftext|>there"
+            → split → ["Hi", "<|endoftext|>", "there"]
+            → "Hi"     → pre_tokenize → ["Hi"]     → _encode_pretoken → [17250]
+            → "<|eot|>" → 整段查 _bytes_to_id      → [50256]
+            → "there"  → pre_tokenize → ["there"]  → _encode_pretoken → [258]
+            → 拼起来 [17250, 50256, 258]
+        """
         ids: list[int] = []
         for piece in split_text_on_special_tokens(text, self.special_tokens):
             if not piece:
@@ -76,89 +172,128 @@ class Tokenizer:
                 ids.append(self._bytes_to_id[piece.encode("utf-8")])
                 continue
 
-            # 先 pre-tokenize，再对每个 pretoken 单独做 BPE merge。
-            # 这不是“巧妙优化”，而是 GPT-2 BPE 的正确语义：merge 只发生在同一个
-            # pretoken 内部，绝不能跨词边界。
-            # 例: piece='the cat ate'
-            #   -> pretokens=['the', ' cat', ' ate']
-            #   -> 分别 encode；不会出现把 'e' 和 ' ' 合成一个 token 这种跨词 merge
             for pretoken in pre_tokenize([piece], workers=1):
                 ids.extend(self._encode_pretoken(pretoken))
 
         return ids
 
     def _encode_pretoken(self, pretoken: str) -> list[int]:
-        # Step 1: pre-token 拆成单字节 list[bytes]
-        #   例: 'the' -> [b't', b'h', b'e']
-        byte_seq = [bytes([byte_val]) for byte_val in pretoken.encode("utf-8")]
+        """单个 pretoken（不能再跨词切开）→ 若干 token id。
 
-        # Step 2: 每轮扫「当前所有相邻 pair」，只合并 rank 最小的那一对。
-        # rank = merges 下标，越小越优先。和 pair 在序列里靠左/靠右无关：
-        #   例 [a,b,c,d]，若 (c,d) rank=0、(a,b) rank=9 → 先合 (c,d)，不会因为 (a,b) 靠左就先合它。
+        输入例:
+          pretoken = "there"    # 无空格版，3 个字符，方便手算
+          self._merge_rank = {
+            (b't', b'h'): 0,
+            (b'h', b'e'): 1,
+            (b'th', b'e'): 2,
+          }
+
+        输出例:
+          [258, 302]   # b'the' 和 b're' 各一个 id（未必合成一个 token）
+
+        为什么单独一个函数：merge 不能跨 pretoken 边界；
+        "the cat" 必须先切成 "the" 和 " cat" 再分别进这里。
+        """
+        # pretoken="there" → pretoken.encode("utf-8") = b'there'（5 个 byte）
+        # 每个 byte 单独包成一个 list 元素：
+        byte_seq = [bytes([byte_val]) for byte_val in pretoken.encode("utf-8")]
+        # byte_seq = [b't', b'h', b'e', b'r', b'e']
+        #            ^index0 ^1    ^2    ^3    ^4
+        # 类型：list[bytes]，长度 = pretoken 的 UTF-8 字节数
+
         while True:
-            best_rank = None
-            best_index = None
+            best_rank = None      # 本轮找到的「最小 merge 优先级」；None = 还没找到
+            best_index = None     # 这个最小 rank 的 pair 在 byte_seq 里的左端下标
+
+            # len(byte_seq)=5 → index 走 0,1,2,3（共 4 个相邻 pair）
             for index in range(len(byte_seq) - 1):
                 pair = (byte_seq[index], byte_seq[index + 1])
+                # index=0: pair=(b't', b'h')
+                # index=1: pair=(b'h', b'e')
+                # index=2: pair=(b'e', b'r')
+                # index=3: pair=(b'r', b'e')
+
                 rank = self._merge_rank.get(pair)
+                # (t,h)→0, (h,e)→1；(e,r)和(r,e)不在表里 → rank=None
+
                 if rank is not None and (best_rank is None or rank < best_rank):
                     best_rank = rank
                     best_index = index
+                # 扫完后：best_rank=0, best_index=0（(t,h) 比 (h,e) 优先）
 
-            # 所有相邻 pair 都不在 merge_rank 里 → 没法再合了
             if best_index is None:
+                # 所有相邻 pair 都不在 merge 表里 → 再也合不动了
                 break
 
-            left = byte_seq[best_index]
-            right = byte_seq[best_index + 1]
+            left = byte_seq[best_index]           # b't'
+            right = byte_seq[best_index + 1]      # b'h'
             merge_bytes_at_index(byte_seq, best_index, left, right)
+            # ── 第 1 轮 merge 后 ──
+            # byte_seq = [b'th', b'e', b'r', b'e']   长度 5→4
+            #
+            # ── 第 2 轮 while：best_index=0，pair (th,e) rank=2 ──
+            # byte_seq = [b'the', b'r', b'e']          长度 4→3
+            #
+            # ── 第 3 轮 while：(the,r)、(r,e) 都不在 merge 表 → best_index=None → break ──
 
-        # Step 3: 每个 bytes token 查 vocab 得 id
-        #   例: [b'the'] -> [9]
+        # byte_seq 停住时 = [b'the', b're']   （2 个 token，不是 1 个——合不动了就停）
         return [self._bytes_to_id[token_bytes] for token_bytes in byte_seq]
+        # → [_bytes_to_id[b'the'], _bytes_to_id[b're']]  例：[258, 302]
 
     def encode_iterable(self, iterable: Iterable[str]) -> Iterator[int]:
-        # --- iterable vs generator，用这个函数记一下 ---
-        #
-        # iterable：任何能被 for 循环的东西。
-        #   例: open("big.txt") 每次给出一行（通常带 '\n'）
-        #       ["Hello", " world"]
-        #
-        # 本函数带 yield，所以调用时返回的是 generator（一种 iterator）：
-        #   ids = tokenizer.encode_iterable(f)   # 这里几乎还没开始 encode
-        #   for token_id in ids:                 # 每要一个 id，才继续往下跑一点
-        #       ...
-        #
-        # 对比 encode()：
-        #   encode(text) -> list[int]   # 一次算完，整份结果都在内存里
-        #   encode_iterable(...)        # 边读边 yield，适合大文件（测记忆体时只有 ~1MB 限额）
-        #
-        # 为什么可以对“每一行”分别 encode？
-        #   文件按行迭代时，边界落在 '\n' 上；GPT-2 pre-tokenize 本来就会在空白处切开，
-        #   所以 line-by-line 的结果应和整文件一次 encode 一致（至少对本作业语料成立）
+        """大文件边读边 encode，每次只处理 iterable 吐出的一小块文本。
+
+        输入例:
+          iterable = open("tinystories.txt")   # 每次 for 循环给一行 "Once upon...\n"
+          或 iterable = ["Hello", " world"]
+
+        输出例（逐个 yield，不是一次性 list）:
+          123, 456, 789, ...   # 等价于把全文 encode 后按顺序吐 id
+
+        和 encode 的区别:
+          encode("整本书")        → list[int]，全文同时在内存
+          encode_iterable(file)   → 读一行 encode 一行，内存只占一行
+
+        为什么按行切仍正确：GPT-2 pre-tokenize 本来就在空白/换行处切开，
+        行尾的 '\\n' 会留在 pretoken 里，和一次 encode 整文件一致。
+        """
         for text_chunk in iterable:
-            # yield from：把 encode 得到的那一小段 list，逐个 id 往外递
-            # 等价于: for token_id in self.encode(text_chunk): yield token_id
             yield from self.encode(text_chunk)
 
     def decode(self, ids: list[int]) -> str:
-        # id -> vocab 里的 bytes，拼成一条 bytes，再 decode 成 str
-        # errors="replace"：非法 utf-8 字节用 � 代替，避免直接抛错
-        # 例: ids=[72, 101, 108, 108, 111] -> b'Hello' -> 'Hello'
+        """token id 列表 → 字符串（encode 的逆，但不保证逐 token 可逆）。
+
+        输入例:
+          ids = [17250, 994]    # 对应 b'Hi' + b' there'
+
+        输出例:
+          "Hi there"
+
+        数据流:
+          [17250, 994]
+            → vocab[17250]=b'Hi', vocab[994]=b' there'
+            → b"".join(...) = b'Hi there'
+            → .decode("utf-8") = "Hi there"
+
+        注意：不在 token 之间加空格；空格已经编码在某个 token 的 bytes 里（如 b' there'）。
+        """
         token_bytes = b"".join(self.vocab[token_id] for token_id in ids)
         return token_bytes.decode("utf-8", errors="replace")
 
 
 def _load_vocab_from_json(raw_vocab: dict) -> dict[int, bytes]:
-    """支持两种落盘格式：训练脚本 {id: display}，GPT-2 fixture {display: id}。"""
-    # 例 A（训练脚本 artifacts/vocab.json）:
-    #   {"0": "<|endoftext|>", "1": "!", "257": "Ġt", ...}
-    #   -> {0: b'<|endoftext|>', 1: b'!', 257: b' t', ...}
-    #
-    # 例 B（GPT-2 fixture gpt2_vocab.json / train-bpe-reference-vocab.json）:
-    #   {"<|endoftext|>": 0, "!": 1, "Ġt": 257, ...}
-    #   -> {0: b'<|endoftext|>', 1: b'!', 257: b' t', ...}
-    # 两种输入方向不同，最终都统一成 id -> bytes
+    """json 里的 vocab → 内存里统一的 dict[int, bytes]。
+
+    输入例 A（训练脚本格式，key 是 id 字符串）:
+      {"0": "<|endoftext|>", "257": "Ġthe"}
+
+    输入例 B（GPT-2 fixture，key 是 display 字符串）:
+      {"<|endoftext|>": 0, "Ġthe": 257}
+
+    输出例（两种输入都得到同一种结构）:
+      {0: b'<|endoftext|>', 257: b' the'}
+      # "Ġ" 是 GPT-2 文件里表示前导空格的 display 字符 → 真实 bytes 是 b' the'
+    """
     sample_key = next(iter(raw_vocab))
     if sample_key.isdigit():
         return {int(token_id): gpt2_display_to_bytes(display) for token_id, display in raw_vocab.items()}
@@ -166,11 +301,20 @@ def _load_vocab_from_json(raw_vocab: dict) -> dict[int, bytes]:
 
 
 def _load_merges_from_text(merges_filepath: str) -> list[tuple[bytes, bytes]]:
-    # 例 merges.txt 每行一个 pair（GPT-2 display，空格分隔）:
-    #   Ġ t
-    #   h e
-    #   Ġt he
-    # -> [(b' ', b't'), (b'h', b'e'), (b' t', b'he')]
+    """merges.txt → BPE 合并规则列表（顺序 = 训练时学到的优先级）。
+
+    输入例（文件内容两行）:
+      Ġ t
+      h e
+
+    输出例:
+      [(b' ', b't'), (b'h', b'e')]
+      # rank 0 = (b' ', b't') 最先被考虑合并
+      # rank 1 = (b'h', b'e')
+
+    为什么用 bytes 不用 display 字符串：encode 时 byte_seq 全是 bytes，
+    查 _merge_rank 的 key 也是 (bytes, bytes)。
+    """
     merges: list[tuple[bytes, bytes]] = []
     with open(merges_filepath, encoding="utf-8") as f:
         for line in f:
