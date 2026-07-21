@@ -412,7 +412,7 @@ def main(argv: list[str] | None = None) -> None:
         save_checkpoint(model, optimizer, iteration=cfg.train.max_iters, out=final_path)
         print(f"[done] final checkpoint {final_path}")
     finally:
-        # 画 curves/*.png，并往 reports/experiment_log.md 追加一小节事实
+        # 画 curves/*.png，并往 misc/experiment_log.md 追加一小节事实
         logger.finalize(experiment_name=cfg.experiment_name)
         logger.close()
         if use_wandb:

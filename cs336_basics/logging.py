@@ -24,7 +24,7 @@ from typing import TextIO
 CSV_FIELDS = ("step", "wall_s", "train_loss", "valid_loss", "lr")
 
 # 作业 experiment_log 手记；finalize 时追加一小节「事实」（路径/loss/墙钟）
-DEFAULT_EXPERIMENT_LOG = Path("reports/experiment_log.md")
+DEFAULT_EXPERIMENT_LOG = Path("misc/experiment_log.md")
 
 
 def make_run_dir(checkpoint_dir: str | Path, *, when: datetime | None = None) -> Path:
@@ -132,7 +132,7 @@ class RunLogger:
         self._file.flush()
 
     def finalize(self, *, experiment_name: str | None = None) -> None:
-        """刷盘 → 画两张 PNG →（可选）往 reports/experiment_log.md 追加一小节事实。
+        """刷盘 → 画两张 PNG →（可选）往 misc/experiment_log.md 追加一小节事实。
 
         输出文件例：
           run_dir/curves/loss_vs_steps.png

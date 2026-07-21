@@ -255,7 +255,7 @@ def main() -> None:
         print(f"[{i}/{len(to_run)}] exit_code={result.returncode}", flush=True)
 
     print("\n画图: uv run python scripts/plot_lr_sweep.py", flush=True)
-    print("日志: reports/experiment_log.md", flush=True)
+    print("日志: misc/experiment_log.md", flush=True)
 
 
 if __name__ == "__main__":
