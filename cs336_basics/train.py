@@ -10,6 +10,7 @@ from __future__ import annotations
 import argparse
 import dataclasses
 import json
+import math
 import random
 import time
 from dataclasses import dataclass
@@ -48,6 +49,8 @@ class ModelConfig:
     num_heads: int
     rope_theta: float
     d_ff: int | None = None  # None → compute_d_ff(d_model)
+    # pre_norm | post_norm | none_norm（默认与作业基线一致）
+    norm_placement: str = "pre_norm"
 
 
 @dataclass
@@ -113,6 +116,7 @@ def dict_to_train_config(d: dict[str, Any]) -> TrainConfig:
             num_heads=int(model["num_heads"]),
             rope_theta=float(model["rope_theta"]),
             d_ff=int(model["d_ff"]) if model.get("d_ff") is not None else None,
+            norm_placement=str(model.get("norm_placement", "pre_norm")),
         ),
         optim=OptimConfig(
             lr_max=float(optim["lr_max"]),
@@ -207,6 +211,7 @@ def build_model(cfg: TrainConfig) -> TransformerLM:
         num_heads=m.num_heads,
         d_ff=d_ff,
         rope_theta=m.rope_theta,
+        norm_placement=m.norm_placement,  # type: ignore[arg-type]
         device=device,
     )
 
@@ -390,6 +395,15 @@ def main(argv: list[str] | None = None) -> None:
 
                     wandb.log({"train/loss": loss, "train/lr": lr, "iter": it}, step=it)
 
+            # 提前停：数值崩坏，或 train loss 已坏到不值得继续空转
+            if not math.isfinite(loss) or loss > 20.0:
+                lr = optimizer.param_groups[0]["lr"]
+                if it % cfg.logging.log_interval != 0:
+                    logger.log_train(it, loss, lr)
+                reason = "non-finite loss" if not math.isfinite(loss) else f"train_loss={loss:.4f}>20"
+                print(f"[abort] iter={it} {reason}  wall={logger.wall_s():.1f}s", flush=True)
+                break
+
             if it > 0 and it % cfg.train.eval_interval == 0:
                 # val_loss: 验证集若干 batch 平均 CE。例：8.4361
                 val_loss = evaluate(model, valid_data, cfg)
@@ -407,10 +421,11 @@ def main(argv: list[str] | None = None) -> None:
                 save_checkpoint(model, optimizer, iteration=it + 1, out=out)
                 print(f"[ckpt] wrote {out}")
 
-        # final checkpoint
-        final_path = run_dir / f"ckpt_iter{cfg.train.max_iters}.pt"
-        save_checkpoint(model, optimizer, iteration=cfg.train.max_iters, out=final_path)
-        print(f"[done] final checkpoint {final_path}")
+        else:
+            # final checkpoint（正常跑满才写）
+            final_path = run_dir / f"ckpt_iter{cfg.train.max_iters}.pt"
+            save_checkpoint(model, optimizer, iteration=cfg.train.max_iters, out=final_path)
+            print(f"[done] final checkpoint {final_path}")
     finally:
         # 画 curves/*.png，并往 misc/experiment_log.md 追加一小节事实
         logger.finalize(experiment_name=cfg.experiment_name)

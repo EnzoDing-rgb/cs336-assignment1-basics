@@ -2,10 +2,12 @@
 
 本文件除整网组装外，还放仅在此处使用的：
 - SwiGLU feed-forward
-- Pre-norm transformer block（调用 linear / attention / normalization）
+- Transformer block（pre_norm / post_norm / none_norm，由 config 选择）
 """
 
 from __future__ import annotations
+
+from typing import Literal
 
 import torch
 import torch.nn as nn
@@ -17,11 +19,35 @@ from cs336_basics.model.embedding import Embedding
 from cs336_basics.model.linear import Linear
 from cs336_basics.model.normalization import RMSNorm
 
+NormPlacement = Literal["pre_norm", "post_norm", "none_norm"]
+NORM_PLACEMENTS: tuple[str, ...] = ("pre_norm", "post_norm", "none_norm")
+
 
 def compute_d_ff(d_model: int) -> int:
   """d_ff ≈ 8/3 * d_model，向上取到 64 的倍数。"""
   d_ff = int(8 / 3 * d_model)
   return ((d_ff + 63) // 64) * 64
+
+
+def _validate_norm_placement(norm_placement: str) -> NormPlacement:
+  if norm_placement not in NORM_PLACEMENTS:
+    raise ValueError(
+      f"norm_placement must be one of {NORM_PLACEMENTS}, got {norm_placement!r}"
+    )
+  return norm_placement  # type: ignore[return-value]
+
+
+def _make_norm(
+  d_model: int,
+  *,
+  norm_placement: NormPlacement,
+  device: torch.device | None,
+  dtype: torch.dtype | None,
+) -> nn.Module:
+  """none_norm → Identity；pre_norm / post_norm → RMSNorm。"""
+  if norm_placement == "none_norm":
+    return nn.Identity()
+  return RMSNorm(d_model, device=device, dtype=dtype)
 
 
 class SwiGLU(nn.Module):
@@ -54,13 +80,12 @@ class SwiGLU(nn.Module):
 
 
 class TransformerBlock(nn.Module):
-  """Pre-norm Transformer block：注意力 sub-layer + 前馈 sub-layer。
+  """Transformer block：注意力 sub-layer + 前馈 sub-layer。
 
-  全文统一数字例子：
-    d_model=768, num_heads=8 → 每头 64；d_ff=2048
-    batch=2, seq=3（"I love cats"），x.shape = (2, 3, 768)
-
-  每个 sub-layer 都是：先 RMSNorm → 再主运算 → 再残差加回去。
+  norm_placement:
+    pre_norm:  x + f(RMSNorm(x))
+    post_norm: RMSNorm(x + f(x))
+    none_norm: x + f(x)
   """
 
   def __init__(
@@ -71,14 +96,16 @@ class TransformerBlock(nn.Module):
     *,
     max_seq_len: int,
     theta: float,
+    norm_placement: NormPlacement = "pre_norm",
     device: torch.device | None = None,
     dtype: torch.dtype | None = None,
   ) -> None:
     super().__init__()
+    self.norm_placement = _validate_norm_placement(norm_placement)
 
-    # 注意力前的归一化（每个大格子 768 维自己归一）
-    self.attn_rms_norm = RMSNorm(d_model, device=device, dtype=dtype)
-    # 带 RoPE 的因果多头自注意力
+    self.attn_rms_norm = _make_norm(
+      d_model, norm_placement=self.norm_placement, device=device, dtype=dtype
+    )
     self.attn = MultiheadSelfAttention(
       d_model,
       num_heads,
@@ -88,9 +115,9 @@ class TransformerBlock(nn.Module):
       dtype=dtype,
     )
 
-    # 前馈前的归一化（另一套可学习 weight，不和上面共用）
-    self.ffn_rms_norm = RMSNorm(d_model, device=device, dtype=dtype)
-    # 每个大格子自己做的 SwiGLU：768 → 2048 门控 → 768
+    self.ffn_rms_norm = _make_norm(
+      d_model, norm_placement=self.norm_placement, device=device, dtype=dtype
+    )
     self.ffn = SwiGLU(d_model, d_ff, device=device, dtype=dtype)
 
   def forward(
@@ -98,39 +125,29 @@ class TransformerBlock(nn.Module):
     x: Float[Tensor, "batch seq d_model"],
     token_positions: Int[Tensor, "batch seq"] | None = None,
   ) -> Float[Tensor, "batch seq d_model"]:
-    # x 例: (2, 3, 768)
     batch, seq_len, _ = x.shape
 
-    # RoPE 需要每个大格子的座位号；没传入就按 0..seq-1 填
-    # 例: token_positions = [[0,1,2],[0,1,2]]  shape (2, 3)
     if token_positions is None:
       token_positions = torch.arange(seq_len, device=x.device).unsqueeze(0).expand(batch, -1)
 
-    # ── sub-layer 1：注意力 ──
-    # y1 = x + MultiHeadSelfAttention(RMSNorm(x))
-    #
-    # attn_rms_norm(x): (2, 3, 768) → (2, 3, 768)  幅度稳住
-    # attn(...):        大格子之间换信息，输出仍 (2, 3, 768)
-    # 残差 +x:          把原始 x 加回去，信息高速公路
-    x = x + self.attn(self.attn_rms_norm(x), token_positions=token_positions)
+    if self.norm_placement == "pre_norm":
+      x = x + self.attn(self.attn_rms_norm(x), token_positions=token_positions)
+      x = x + self.ffn(self.ffn_rms_norm(x))
+    elif self.norm_placement == "post_norm":
+      x = self.attn_rms_norm(x + self.attn(x, token_positions=token_positions))
+      x = self.ffn_rms_norm(x + self.ffn(x))
+    else:  # none_norm
+      x = x + self.attn(x, token_positions=token_positions)
+      x = x + self.ffn(x)
 
-    # ── sub-layer 2：前馈 ──
-    # y = y1 + SwiGLU(RMSNorm(y1))
-    #
-    # ffn_rms_norm(x): (2, 3, 768) → (2, 3, 768)
-    # ffn(...):        每个大格子独自 768→2048 门控→768，互不 attend
-    # 残差:            再加回进入本 sub-layer 前的 x
-    x = x + self.ffn(self.ffn_rms_norm(x))
-
-    # 输出仍是 (2, 3, 768)，交给下一层 block 或最终归一化
     return x
 
 
 class TransformerLM(nn.Module):
-  """整网：Embedding → N×Block → Final RMSNorm → LM Head。
+  """整网：Embedding → N×Block → (可选 Final RMSNorm) → LM Head。
 
-  例子：vocab=10000, d_model=768, num_layers=2, batch=2, seq=3
-    token_ids (2, 3) → logits (2, 3, 10000)
+  none_norm：去掉 block 内与出口全部 RMSNorm。
+  pre_norm / post_norm：保留出口 ln_final。
   """
 
   def __init__(
@@ -143,11 +160,12 @@ class TransformerLM(nn.Module):
     d_ff: int,
     rope_theta: float,
     *,
+    norm_placement: NormPlacement = "pre_norm",
     device: torch.device | None = None,
     dtype: torch.dtype | None = None,
   ) -> None:
     super().__init__()
-    # embedding_weight 就挂在这里：形状 (vocab_size, d_model)，前向按 id 取行
+    self.norm_placement = _validate_norm_placement(norm_placement)
     self.token_embeddings = Embedding(vocab_size, d_model, device=device, dtype=dtype)
     self.layers = nn.ModuleList(
       [
@@ -157,26 +175,24 @@ class TransformerLM(nn.Module):
           d_ff,
           max_seq_len=context_length,
           theta=rope_theta,
+          norm_placement=self.norm_placement,
           device=device,
           dtype=dtype,
         )
         for _ in range(num_layers)
       ]
     )
-    self.ln_final = RMSNorm(d_model, device=device, dtype=dtype)
-    # LM Head：就是一层线性，768 → vocab_size；weight 形状 (vocab_size, 768)
+    self.ln_final = _make_norm(
+      d_model, norm_placement=self.norm_placement, device=device, dtype=dtype
+    )
     self.lm_head = Linear(d_model, vocab_size, device=device, dtype=dtype)
 
   def forward(
     self,
     token_ids: Int[Tensor, "batch seq"],
   ) -> Float[Tensor, "batch seq vocab_size"]:
-    # ① 查表：token_ids (2, 3) → x (2, 3, 768)
     x = self.token_embeddings(token_ids)
-    # ② 叠 N 层 block，形状始终 (2, 3, 768)
     for layer in self.layers:
       x = layer(x)
-    # ③ 出口 RMSNorm
     x = self.ln_final(x)
-    # ④ LM Head → logits (2, 3, vocab_size)
     return self.lm_head(x)

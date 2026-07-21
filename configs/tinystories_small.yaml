@@ -18,6 +18,8 @@ model:
   num_heads: 16
   # d_ff: omit → computed by compute_d_ff(d_model)
   rope_theta: 10000.0
+  # pre_norm | post_norm | none_norm
+  norm_placement: pre_norm
 
 optim:
   lr_max: 3.0e-4
