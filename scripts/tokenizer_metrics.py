@@ -17,7 +17,7 @@ SEP = "=" * 72
 
 
 def load_tok(name: str) -> Tokenizer:
-    d = ROOT / "artifacts" / name
+    d = ROOT / "artifacts" / "tokenizers" / name
     return Tokenizer.from_files(
         str(d / "vocab.json"),
         str(d / "merges.txt"),
@@ -103,10 +103,10 @@ def main() -> None:
     pile_sec_ts = pile_bytes / ts_bps
     pile_sec_owt = pile_bytes / owt_bps
 
-    ts_train = summarize_npy(ROOT / "artifacts" / "tinystories_tokens" / "tinystories_train.npy")
-    ts_valid = summarize_npy(ROOT / "artifacts" / "tinystories_tokens" / "tinystories_valid.npy")
-    owt_train = summarize_npy(ROOT / "artifacts" / "owt_tokens" / "owt_train.npy")
-    owt_valid = summarize_npy(ROOT / "artifacts" / "owt_tokens" / "owt_valid.npy")
+    ts_train = summarize_npy(ROOT / "artifacts" / "tokens" / "tinystories_tokens" / "tinystories_train.npy")
+    ts_valid = summarize_npy(ROOT / "artifacts" / "tokens" / "tinystories_tokens" / "tinystories_valid.npy")
+    owt_train = summarize_npy(ROOT / "artifacts" / "tokens" / "owt_tokens" / "owt_train.npy")
+    owt_valid = summarize_npy(ROOT / "artifacts" / "tokens" / "owt_tokens" / "owt_valid.npy")
 
     out = {
         "a": {
@@ -149,7 +149,7 @@ def main() -> None:
     print("(b) OWT sample, TS 10k tok:           %.3f bytes/token (%d tokens); %.2fx more tokens than matched OWT tok" % (owt_on_ts, owt_ts_tok_n, owt_ts_tok_n / owt_tok_n))
     print("(c) throughput TS tok: %.2f MiB/s | OWT tok: %.2f MiB/s" % (ts_bps / (1024**2), owt_bps / (1024**2)))
     print("(c) Pile 825 GiB estimate: TS tok %.1f h | OWT tok %.1f h" % (pile_sec_ts / 3600, pile_sec_owt / 3600))
-    print("(d) see encoded .npy max_id vs uint16; files under artifacts/*_tokens/")
+    print("(d) see encoded .npy max_id vs uint16; files under artifacts/tokens/*_tokens/")
 
 
 if __name__ == "__main__":

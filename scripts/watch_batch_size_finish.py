@@ -9,7 +9,7 @@ import time
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-SUMMARY = ROOT / "artifacts" / "batch_size_sweep_summary.csv"
+SUMMARY = ROOT / "artifacts" / "logs" / "batch_size" / "batch_size_sweep_summary.csv"
 POLL = 120
 
 
@@ -44,7 +44,7 @@ def main() -> None:
 
     # 补跑 256（显存已清；mem-probe 会再确认）
     print("[watch-bs] launching B=256 follow-up…", flush=True)
-    log = ROOT / "artifacts" / "sweep_batch_size_bs256.log"
+    log = ROOT / "artifacts" / "logs" / "batch_size" / "sweep_batch_size_bs256.log"
     with log.open("a", encoding="utf-8") as f:
         f.write("\n# follow-up B=256\n")
         proc = subprocess.run(

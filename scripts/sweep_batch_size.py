@@ -13,7 +13,7 @@
 
   uv run python scripts/sweep_batch_size.py
   nohup uv run python -u scripts/sweep_batch_size.py \\
-    > artifacts/sweep_batch_size.log 2>&1 &
+    > artifacts/logs/batch_size/sweep_batch_size.log 2>&1 &
 """
 
 from __future__ import annotations
@@ -296,7 +296,7 @@ def main() -> None:
     if not batches:
         sys.exit(1)
 
-    summary = ROOT / "artifacts" / "batch_size_sweep_summary.csv"
+    summary = ROOT / "artifacts" / "logs" / "batch_size" / "batch_size_sweep_summary.csv"
     lines = ["batch_size,chosen_lr,full_valid,full_wall_s,full_steps,status"]
 
     for B in batches:

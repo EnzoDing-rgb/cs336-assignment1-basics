@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Overnight closer: wait for main sweep → B=256 → plot → DONE flag.
 
-报告 Markdown 不自动套话生成；完成后写 artifacts/batch_size_DONE
+报告 Markdown 不自动套话生成；完成后写 artifacts/logs/batch_size/batch_size_DONE
 供监控检测，对话里再写 reports/batch_size.md。
 """
 
@@ -12,8 +12,8 @@ import time
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-SUMMARY = ROOT / "artifacts" / "batch_size_sweep_summary.csv"
-DONE = ROOT / "artifacts" / "batch_size_DONE"
+SUMMARY = ROOT / "artifacts" / "logs" / "batch_size" / "batch_size_sweep_summary.csv"
+DONE = ROOT / "artifacts" / "logs" / "batch_size" / "batch_size_DONE"
 PLOT = ROOT / "artifacts" / "plots" / "batch_size" / "batch_size_summary.png"
 POLL = 60
 
@@ -61,7 +61,7 @@ def run_256() -> None:
         print("[overnight] B=256 already done", flush=True)
         return
     print("[overnight] running B=256 follow-up", flush=True)
-    log = ROOT / "artifacts" / "sweep_batch_size_bs256.log"
+    log = ROOT / "artifacts" / "logs" / "batch_size" / "sweep_batch_size_bs256.log"
     with log.open("a", encoding="utf-8") as f:
         f.write(f"\n# overnight follow-up {time.strftime('%Y-%m-%d %H:%M:%S')}\n")
         proc = subprocess.run(

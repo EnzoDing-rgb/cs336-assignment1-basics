@@ -34,8 +34,8 @@ DEFAULT_CKPT = (
 DEFAULT_CONFIG = (
     ROOT / "artifacts/checkpoints/tinystories_bs128/20260721_0343/run_config.yaml"
 )
-DEFAULT_VOCAB = ROOT / "artifacts/tinystories_bpe/vocab.json"
-DEFAULT_MERGES = ROOT / "artifacts/tinystories_bpe/merges.txt"
+DEFAULT_VOCAB = ROOT / "artifacts/tokenizers/tinystories_bpe/vocab.json"
+DEFAULT_MERGES = ROOT / "artifacts/tokenizers/tinystories_bpe/merges.txt"
 DEFAULT_OUT = ROOT / "artifacts/stories"
 
 PROMPT = "Once upon a time, there was a boy named Enzo."

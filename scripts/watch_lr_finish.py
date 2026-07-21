@@ -7,7 +7,7 @@
 Usage（repo root）：
 
   nohup uv run python -u scripts/watch_lr_finish.py \\
-    > artifacts/watch_lr_finish.log 2>&1 &
+    > artifacts/logs/lr/watch_lr_finish.log 2>&1 &
 """
 
 from __future__ import annotations
@@ -74,7 +74,7 @@ def ensure_ninth_started() -> None:
 
     print("[watch] parent did not start 9th; launching sweep_lr.py", flush=True)
     cmd = ["uv", "run", "python", "-u", "scripts/sweep_lr.py"]
-    log = ROOT / "artifacts" / "sweep_lr.log"
+    log = ROOT / "artifacts" / "logs" / "lr" / "sweep_lr.log"
     log.parent.mkdir(parents=True, exist_ok=True)
     with log.open("a") as f:
         f.write("\n# launched by watch_lr_finish.py for 9th\n")

@@ -30,7 +30,7 @@
   uv run python scripts/sweep_lr.py
 
   nohup uv run python -u scripts/sweep_lr.py \\
-    > artifacts/sweep_lr.log 2>&1 &
+    > artifacts/logs/lr/sweep_lr.log 2>&1 &
 
 画图：uv run python scripts/plot_lr_sweep.py
 ================================================================================

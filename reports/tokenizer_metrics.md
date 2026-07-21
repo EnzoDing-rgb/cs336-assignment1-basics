@@ -26,7 +26,7 @@ cd /root/.dev/ml-sys/cs336/assignment1-basics && uv run python scripts/tokenizer
 可选：只看 BPE 产物是否在（不跑 Python）：
 
 ```bash
-ls -lh /root/.dev/ml-sys/cs336/assignment1-basics/artifacts/owt_bpe/ && ls -lh /root/.dev/ml-sys/cs336/assignment1-basics/artifacts/tinystories_bpe/ && ls -lh /root/.dev/ml-sys/cs336/assignment1-basics/artifacts/owt_tokens/ && ls -lh /root/.dev/ml-sys/cs336/assignment1-basics/artifacts/tinystories_tokens/
+ls -lh /root/.dev/ml-sys/cs336/assignment1-basics/artifacts/tokenizers/owt_bpe/ && ls -lh /root/.dev/ml-sys/cs336/assignment1-basics/artifacts/tokenizers/tinystories_bpe/ && ls -lh /root/.dev/ml-sys/cs336/assignment1-basics/artifacts/tokens/owt_tokens/ && ls -lh /root/.dev/ml-sys/cs336/assignment1-basics/artifacts/tokens/tinystories_tokens/
 ```
 
 ---
@@ -46,7 +46,7 @@ cd /root/.dev/ml-sys/cs336/assignment1-basics && uv run python -m cs336_basics.t
 OWT（32k 词表；建议 tee 日志，墙钟很长）：
 
 ```bash
-cd /root/.dev/ml-sys/cs336/assignment1-basics && uv run python -m cs336_basics.tokenization.train_bpe --dataset owt --vocab-size 32000 --workers 8 2>&1 | tee /root/.dev/ml-sys/cs336/assignment1-basics/artifacts/owt_bpe_train.log
+cd /root/.dev/ml-sys/cs336/assignment1-basics && uv run python -m cs336_basics.tokenization.train_bpe --dataset owt --vocab-size 32000 --workers 8 2>&1 | tee /root/.dev/ml-sys/cs336/assignment1-basics/artifacts/logs/tokenizer/owt_bpe_train.log
 ```
 
 产物：`artifacts/<dataset>_bpe/{vocab.json, merges.txt, profile_report.json}`。
@@ -57,14 +57,14 @@ cd /root/.dev/ml-sys/cs336/assignment1-basics && uv run python -m cs336_basics.t
 
 | 数据集 | vocab | 产物目录 |
 |--------|-------|----------|
-| OWT | 32,000 | `/root/.dev/ml-sys/cs336/assignment1-basics/artifacts/owt_bpe/` |
-| TinyStories | 10,000 | `/root/.dev/ml-sys/cs336/assignment1-basics/artifacts/tinystories_bpe/` |
+| OWT | 32,000 | `/root/.dev/ml-sys/cs336/assignment1-basics/artifacts/tokenizers/owt_bpe/` |
+| TinyStories | 10,000 | `/root/.dev/ml-sys/cs336/assignment1-basics/artifacts/tokenizers/tinystories_bpe/` |
 
 每个目录三个文件：`vocab.json`、`merges.txt`、`profile_report.json`。
 
 OWT 训练日志（很长，看末尾汇总）：
 
-`/root/.dev/ml-sys/cs336/assignment1-basics/artifacts/owt_bpe_train.log`
+`/root/.dev/ml-sys/cs336/assignment1-basics/artifacts/logs/tokenizer/owt_bpe_train.log`
 
 ---
 
@@ -74,19 +74,19 @@ OWT 训练日志（很长，看末尾汇总）：
 
 | 打开 | 看什么 |
 |------|--------|
-| `/root/.dev/ml-sys/cs336/assignment1-basics/artifacts/owt_bpe/profile_report.json` | `longest_token.id=25822`, `length_bytes=64` |
-| `/root/.dev/ml-sys/cs336/assignment1-basics/artifacts/tinystories_bpe/profile_report.json` | `longest_token.id=7160`, `display=Ġaccomplishment` |
+| `/root/.dev/ml-sys/cs336/assignment1-basics/artifacts/tokenizers/owt_bpe/profile_report.json` | `longest_token.id=25822`, `length_bytes=64` |
+| `/root/.dev/ml-sys/cs336/assignment1-basics/artifacts/tokenizers/tinystories_bpe/profile_report.json` | `longest_token.id=7160`, `display=Ġaccomplishment` |
 
 ### B. `vocab.json`（最长 token 真身）
 
 在 Cursor 里 Ctrl+F：
 
-- OWT：打开 `.../artifacts/owt_bpe/vocab.json`，搜 `"25822"`  
-- TinyStories：打开 `.../artifacts/tinystories_bpe/vocab.json`，搜 `"7160"`
+- OWT：打开 `.../artifacts/tokenizers/owt_bpe/vocab.json`，搜 `"25822"`  
+- TinyStories：打开 `.../artifacts/tokenizers/tinystories_bpe/vocab.json`，搜 `"7160"`
 
 ### C. `merges.txt`（merge 顺序）
 
-打开 `.../artifacts/owt_bpe/merges.txt`，前几行类似：
+打开 `.../artifacts/tokenizers/owt_bpe/merges.txt`，前几行类似：
 
 ```text
 Ġ t
@@ -99,7 +99,7 @@ OWT 共 **31,743** 行；TinyStories **9,743** 行。
 ### D. 命令验证（单行）
 
 ```bash
-cat /root/.dev/ml-sys/cs336/assignment1-basics/artifacts/owt_bpe/profile_report.json && echo "---" && cat /root/.dev/ml-sys/cs336/assignment1-basics/artifacts/tinystories_bpe/profile_report.json
+cat /root/.dev/ml-sys/cs336/assignment1-basics/artifacts/tokenizers/owt_bpe/profile_report.json && echo "---" && cat /root/.dev/ml-sys/cs336/assignment1-basics/artifacts/tokenizers/tinystories_bpe/profile_report.json
 ```
 
 ---
@@ -438,10 +438,10 @@ for name in ('tinystories_bpe', 'owt_bpe'):
 
 ```text
 data/owt_train.txt  (UTF-8 文本，含 <|endoftext|>)
-  → Tokenizer.from_files(artifacts/owt_bpe/...)
+  → Tokenizer.from_files(artifacts/tokenizers/owt_bpe/...)
   → tokenizer.encode_iterable(file)   # 流式，不把全文读进 RAM
   → 每个 token id 写成 2 字节 little-endian (struct.pack "<H")
-  → 临时 .bin → np.save → artifacts/owt_tokens/owt_train.npy
+  → 临时 .bin → np.save → artifacts/tokens/owt_tokens/owt_train.npy
 ```
 
 实现：`cs336_basics/tokenization/encode_dataset.py`（与测试/作业一致）。
@@ -462,9 +462,9 @@ cd /root/.dev/ml-sys/cs336/assignment1-basics && uv run python -m cs336_basics.t
 
 | 数据集 | split | 路径 | token 数 | max_id | 文件大小 |
 |--------|-------|------|----------|--------|----------|
-| TinyStories | train | `artifacts/tinystories_tokens/tinystories_train.npy` | 540,796,778 | 9,999 | 1.01 GiB |
+| TinyStories | train | `artifacts/tokens/tinystories_tokens/tinystories_train.npy` | 540,796,778 | 9,999 | 1.01 GiB |
 | TinyStories | valid | `.../tinystories_valid.npy` | 5,461,210 | 9,999 | 10 MiB |
-| OWT | train | `artifacts/owt_tokens/owt_train.npy` | 2,727,120,452 | 31,999 | 5.08 GiB |
+| OWT | train | `artifacts/tokens/owt_tokens/owt_train.npy` | 2,727,120,452 | 31,999 | 5.08 GiB |
 | OWT | valid | `.../owt_valid.npy` | 66,401,098 | 31,999 | 124 MiB |
 
 数组形状：一维 `numpy` 数组，`dtype=uint16`，每个元素是一个 **token id**（不是 byte）。
@@ -509,7 +509,7 @@ owt_train: len = 2,727,120,452
 cd /root/.dev/ml-sys/cs336/assignment1-basics && uv run python -c "
 import numpy as np
 from pathlib import Path
-p = Path('artifacts/owt_tokens/owt_train.npy')
+p = Path('artifacts/tokens/owt_tokens/owt_train.npy')
 a = np.load(p, mmap_mode='r')
 print('dtype', a.dtype, 'len', len(a), 'max_id', int(a.max()))
 print('first10', a[:10].tolist())
@@ -524,8 +524,8 @@ cd /root/.dev/ml-sys/cs336/assignment1-basics && uv run python -c "
 import numpy as np
 from cs336_basics.tokenization.tokenizer import Tokenizer
 from pathlib import Path
-tok = Tokenizer.from_files('artifacts/owt_bpe/vocab.json','artifacts/owt_bpe/merges.txt',special_tokens=['<|endoftext|>'])
-a = np.load('artifacts/owt_tokens/owt_train.npy', mmap_mode='r')
+tok = Tokenizer.from_files('artifacts/tokenizers/owt_bpe/vocab.json','artifacts/tokenizers/owt_bpe/merges.txt',special_tokens=['<|endoftext|>'])
+a = np.load('artifacts/tokens/owt_tokens/owt_train.npy', mmap_mode='r')
 print(tok.decode(a[:20].tolist()))
 "
 ```
@@ -593,7 +593,7 @@ CS336 tokenizer_metrics.py results
   },
   "d": {
     "tinystories_train": {
-      "path": "/root/.dev/ml-sys/cs336/assignment1-basics/artifacts/tinystories_tokens/tinystories_train.npy",
+      "path": "/root/.dev/ml-sys/cs336/assignment1-basics/artifacts/tokens/tinystories_tokens/tinystories_train.npy",
       "dtype": "uint16",
       "len": 540796778,
       "max_id": 9999,
@@ -624,7 +624,7 @@ CS336 tokenizer_metrics.py results
       "size_gb": 1.0073126144707203
     },
     "tinystories_valid": {
-      "path": "/root/.dev/ml-sys/cs336/assignment1-basics/artifacts/tinystories_tokens/tinystories_valid.npy",
+      "path": "/root/.dev/ml-sys/cs336/assignment1-basics/artifacts/tokens/tinystories_tokens/tinystories_valid.npy",
       "dtype": "uint16",
       "len": 5461210,
       "max_id": 9999,
@@ -655,7 +655,7 @@ CS336 tokenizer_metrics.py results
       "size_gb": 0.010172415524721146
     },
     "owt_train": {
-      "path": "/root/.dev/ml-sys/cs336/assignment1-basics/artifacts/owt_tokens/owt_train.npy",
+      "path": "/root/.dev/ml-sys/cs336/assignment1-basics/artifacts/tokens/owt_tokens/owt_train.npy",
       "dtype": "uint16",
       "len": 2727120452,
       "max_id": 31999,
@@ -686,7 +686,7 @@ CS336 tokenizer_metrics.py results
       "size_gb": 5.0796578004956245
     },
     "owt_valid": {
-      "path": "/root/.dev/ml-sys/cs336/assignment1-basics/artifacts/owt_tokens/owt_valid.npy",
+      "path": "/root/.dev/ml-sys/cs336/assignment1-basics/artifacts/tokens/owt_tokens/owt_valid.npy",
       "dtype": "uint16",
       "len": 66401098,
       "max_id": 31999,

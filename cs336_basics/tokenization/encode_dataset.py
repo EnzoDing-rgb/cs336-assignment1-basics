@@ -15,14 +15,14 @@ DATASETS: dict[str, dict[str, Path]] = {
     "tinystories": {
         "train": REPO_ROOT / "data" / "TinyStoriesV2-GPT4-train.txt",
         "valid": REPO_ROOT / "data" / "TinyStoriesV2-GPT4-valid.txt",
-        "tokenizer": REPO_ROOT / "artifacts" / "tinystories_bpe",
-        "output_dir": REPO_ROOT / "artifacts" / "tinystories_tokens",
+        "tokenizer": REPO_ROOT / "artifacts" / "tokenizers" / "tinystories_bpe",
+        "output_dir": REPO_ROOT / "artifacts" / "tokens" / "tinystories_tokens",
     },
     "owt": {
         "train": REPO_ROOT / "data" / "owt_train.txt",
         "valid": REPO_ROOT / "data" / "owt_valid.txt",
-        "tokenizer": REPO_ROOT / "artifacts" / "owt_bpe",
-        "output_dir": REPO_ROOT / "artifacts" / "owt_tokens",
+        "tokenizer": REPO_ROOT / "artifacts" / "tokenizers" / "owt_bpe",
+        "output_dir": REPO_ROOT / "artifacts" / "tokens" / "owt_tokens",
     },
 }
 

@@ -4,7 +4,7 @@
 整个文件在干什么（一句话）
 ══════════════════════════════════════════════════════════════════════════════
   输入:  data/TinyStoriesV2-GPT4-train.txt  （一整坨 str）
-  输出:  artifacts/tinystories_bpe/vocab.json + merges.txt
+  输出:  artifacts/tokenizers/tinystories_bpe/vocab.json + merges.txt
          → 交给 Tokenizer.from_files() 做 encode/decode
 
   学的是什么：
@@ -98,11 +98,11 @@ VOCAB_SIZE = 10_000
 DATASETS: dict[str, tuple[Path, Path]] = {
     "tinystories": (
         REPO_ROOT / "data" / "TinyStoriesV2-GPT4-train.txt",
-        REPO_ROOT / "artifacts" / "tinystories_bpe",
+        REPO_ROOT / "artifacts" / "tokenizers" / "tinystories_bpe",
     ),
     "owt": (
         REPO_ROOT / "data" / "owt_train.txt",
-        REPO_ROOT / "artifacts" / "owt_bpe",
+        REPO_ROOT / "artifacts" / "tokenizers" / "owt_bpe",
     ),
 }
 
@@ -463,7 +463,7 @@ def _train_staged_cli(
 
     输入例:
       input_path  = data/TinyStoriesV2-GPT4-train.txt
-      output_dir  = artifacts/tinystories_bpe
+      output_dir  = artifacts/tokenizers/tinystories_bpe
       vocab_size  = 10000
       workers     = 8
 
@@ -615,7 +615,7 @@ def _print_cli_summary(
       === tinystories ===
       wall=1234.567s  peak_rss=8192.0 MiB
       segments=500,000  pretokens=12,000,000  vocab=10,000  merges=9,743
-      artifacts -> /path/to/artifacts/tinystories_bpe
+      artifacts -> /path/to/artifacts/tokenizers/tinystories_bpe
       ...
       => slowest: merge_loop
     """

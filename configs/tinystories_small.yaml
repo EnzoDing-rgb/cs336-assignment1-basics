@@ -7,8 +7,8 @@
 experiment_name: tinystories_small
 
 data:
-  train_path: artifacts/tinystories_tokens/tinystories_train.npy
-  valid_path: artifacts/tinystories_tokens/tinystories_valid.npy
+  train_path: artifacts/tokens/tinystories_tokens/tinystories_train.npy
+  valid_path: artifacts/tokens/tinystories_tokens/tinystories_valid.npy
 
 model:
   vocab_size: 10000
