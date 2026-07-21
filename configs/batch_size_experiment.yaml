@@ -1,0 +1,15 @@
+# Batch-size experiment base pointer.
+# 真正超参由 scripts/sweep_batch_size.py 按协议计算后 --override；
+# 本文件只标明「实验挂在哪份底座配置上」，避免再复制一份完整 yaml。
+#
+# Usage:
+#   uv run python scripts/sweep_batch_size.py
+#   # 等价于对 configs/tinystories_small.yaml 做 batch/iters/lr/schedule overrides
+
+base_config: configs/tinystories_small.yaml
+experiment_family: tinystories_bs
+token_budget_formula: "20000 * 32 * 256"
+batch_grid: [8, 16, 32, 64, 128, 256, 512]
+lr_anchor: {batch_size: 32, lr_max: 1.8e-3}
+lr_probe_mults: [0.5, 1.0, 2.0]
+lr_probe_token_fraction: 0.20

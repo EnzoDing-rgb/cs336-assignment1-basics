@@ -32,15 +32,17 @@ optim:
 train:
   batch_size: 32
   max_iters: 20000
-  eval_interval: 500
+  # ~10 step/s → 600 step ≈ 1 分钟：train 日志 / valid 评估同一节奏
+  eval_interval: 600
   eval_batches: 20
-  checkpoint_interval: 2000
+  checkpoint_interval: 6000
   checkpoint_dir: artifacts/checkpoints/tinystories_small
   resume_path: null
   device: cuda:0
   seed: 42
 
 logging:
-  log_interval: 10
+  # 与 eval_interval 一致：约每分钟一行
+  log_interval: 600
   wandb: false
   wandb_project: cs336-a1
