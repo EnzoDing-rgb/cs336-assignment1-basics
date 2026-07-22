@@ -20,6 +20,10 @@ model:
   rope_theta: 10000.0
   # pre_norm | post_norm | none_norm
   norm_placement: pre_norm
+  # rope | no_rope
+  pos_encoding: rope
+  # swiglu | silu（省略 d_ff 时：swiglu→≈8/3 d_model，silu→4 d_model）
+  ffn_type: swiglu
 
 optim:
   lr_max: 3.0e-4

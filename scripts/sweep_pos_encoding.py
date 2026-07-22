@@ -1,16 +1,15 @@
 #!/usr/bin/env python3
-"""Norm ablation 4×3 sweep（官方 one-go 网格）.
+"""RoPE vs NoPE（pos_encoding）一对一消融.
 
-  placements: pre_norm | post_norm | none_norm
-  lr_max:     1.8e-4 | 1.8e-3 | 1.8e-2 | 9e-2
+协议（grilling 锁定）：
+  · 底座 configs/tinystories_small.yaml
+  · B=64, max_iters=20000, lr_max=1.8e-3, lr_min=1.8e-4
+  · model.pos_encoding ∈ {rope, no_rope}；其余（含 pre_norm）不动
+  · 两边都从零训；abort 规则由 cs336_basics.train（>200 / 非有限）
 
-底座：configs/tinystories_small.yaml（B=32, 20k, grad_clip=1.0）
-提前停：NaN/Inf 或 train_loss>200（cs336_basics.train；none_norm 开局 CE≈21）
-已完成 job 自动 skip；可反复启动续跑。
-
-  uv run python scripts/sweep_norm_ablation.py
-  nohup uv run python -u scripts/sweep_norm_ablation.py \\
-    > artifacts/logs/norm_ablation/sweep_norm_ablation.log 2>&1 &
+  uv run python scripts/sweep_pos_encoding.py
+  nohup uv run python -u scripts/sweep_pos_encoding.py \\
+    > artifacts/logs/pos_encoding/sweep_pos_encoding.log 2>&1 &
 """
 
 from __future__ import annotations
@@ -25,15 +24,13 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 CONFIG = ROOT / "configs" / "tinystories_small.yaml"
-LOG_DIR = ROOT / "artifacts" / "logs" / "norm_ablation"
+LOG_DIR = ROOT / "artifacts" / "logs" / "pos_encoding"
 
-PLACEMENTS = ("pre_norm", "post_norm", "none_norm")
-LR_GRID: list[tuple[str, float]] = [
-    ("1.8e-4", 1.8e-4),
-    ("1.8e-3", 1.8e-3),
-    ("1.8e-2", 1.8e-2),
-    ("9e-2", 9e-2),
-]
+BATCH_SIZE = 64
+LR_MAX = 1.8e-3
+LR_MIN = LR_MAX / 10.0
+LR_TAG = "1.8e-3"
+POS_GRID = ("rope", "no_rope")
 
 DONE_MIN_STEP = 19800
 ABORT_TRAIN_LOSS = 200.0
@@ -41,21 +38,19 @@ ABORT_TRAIN_LOSS = 200.0
 
 @dataclass(frozen=True)
 class Job:
-    placement: str
-    tag: str
-    lr_max: float
+    pos_encoding: str
 
     @property
     def experiment_name(self) -> str:
-        return f"tinystories_{self.placement}_lr{self.tag}"
+        return f"tinystories_{self.pos_encoding}_b64_lr{LR_TAG}"
 
     @property
     def ckpt_dir(self) -> Path:
         return ROOT / "artifacts" / "checkpoints" / self.experiment_name
 
-    @property
-    def lr_min(self) -> float:
-        return self.lr_max / 10.0
+
+def all_jobs() -> list[Job]:
+    return [Job(p) for p in POS_GRID]
 
 
 def latest_metrics(ckpt_dir: Path) -> Path | None:
@@ -98,8 +93,8 @@ def is_finished(job: Job) -> bool:
     return False
 
 
-def build_cmd(job: Job) -> list[str]:
-    return [
+def run_job(job: Job) -> int:
+    cmd = [
         "uv",
         "run",
         "python",
@@ -113,56 +108,69 @@ def build_cmd(job: Job) -> list[str]:
         "--override",
         f"train.checkpoint_dir=artifacts/checkpoints/{job.experiment_name}",
         "--override",
-        f"model.norm_placement={job.placement}",
+        f"model.pos_encoding={job.pos_encoding}",
         "--override",
-        f"optim.lr_max={job.lr_max}",
+        f"train.batch_size={BATCH_SIZE}",
         "--override",
-        f"optim.lr_min={job.lr_min}",
+        f"optim.lr_max={LR_MAX}",
+        "--override",
+        f"optim.lr_min={LR_MIN}",
     ]
+    print(f"[run] {job.experiment_name}", flush=True)
+    print(" ".join(cmd), flush=True)
+    env = os.environ.copy()
+    env.setdefault("PYTHONUNBUFFERED", "1")
+    return subprocess.run(cmd, cwd=ROOT, env=env).returncode
 
 
-def all_jobs() -> list[Job]:
-    return [
-        Job(placement, tag, lr)
-        for placement in PLACEMENTS
-        for tag, lr in LR_GRID
+def write_summary(rows: list[dict[str, object]], path: Path) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fields = [
+        "experiment",
+        "pos_encoding",
+        "batch_size",
+        "lr_max",
+        "status",
+        "last_step",
+        "last_train_loss",
+        "metrics",
     ]
+    with open(path, "w", encoding="utf-8", newline="") as f:
+        w = csv.DictWriter(f, fieldnames=fields)
+        w.writeheader()
+        for r in rows:
+            w.writerow(r)
+    print(f"[write] {path}", flush=True)
 
 
 def main() -> None:
-    p = argparse.ArgumentParser(description="Norm ablation 4×3 sweep")
-    p.add_argument("--only-placements", type=str, default=None)
-    p.add_argument("--only-lrs", type=str, default=None)
-    args = p.parse_args()
-
-    placements = (
-        {x.strip() for x in args.only_placements.split(",") if x.strip()}
-        if args.only_placements
-        else set(PLACEMENTS)
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="只打印将跑/跳过的 job，不启动训练",
     )
-    lr_tags = (
-        {x.strip() for x in args.only_lrs.split(",") if x.strip()}
-        if args.only_lrs
-        else {t for t, _ in LR_GRID}
-    )
+    args = parser.parse_args()
 
     LOG_DIR.mkdir(parents=True, exist_ok=True)
-    jobs = [j for j in all_jobs() if j.placement in placements and j.tag in lr_tags]
-    print(f"[norm] official 4×3 → {len(jobs)} jobs", flush=True)
-
     summary_rows: list[dict[str, object]] = []
-    for job in jobs:
+
+    print(f"[pos] RoPE vs NoPE → {len(POS_GRID)} jobs  B={BATCH_SIZE} lr={LR_MAX}", flush=True)
+    for job in all_jobs():
         if is_finished(job):
             m = latest_metrics(job.ckpt_dir)
             assert m is not None
             step, loss = last_train_step_and_loss(m)
-            print(f"[skip] {job.experiment_name}  step={step} train_loss={loss}", flush=True)
+            print(
+                f"[skip] {job.experiment_name}  step={step} train_loss={loss}",
+                flush=True,
+            )
             summary_rows.append(
                 {
                     "experiment": job.experiment_name,
-                    "placement": job.placement,
-                    "lr_tag": job.tag,
-                    "lr_max": job.lr_max,
+                    "pos_encoding": job.pos_encoding,
+                    "batch_size": BATCH_SIZE,
+                    "lr_max": LR_MAX,
                     "status": "skipped_done",
                     "last_step": step,
                     "last_train_loss": loss,
@@ -171,36 +179,28 @@ def main() -> None:
             )
             continue
 
-        cmd = build_cmd(job)
-        print(f"[run] {job.experiment_name}", flush=True)
-        print(" ".join(cmd), flush=True)
-        env = os.environ.copy()
-        env["PYTHONUNBUFFERED"] = "1"
-        proc = subprocess.run(cmd, cwd=ROOT, env=env)
+        if args.dry_run:
+            print(f"[dry] would run {job.experiment_name}", flush=True)
+            continue
+
+        rc = run_job(job)
         m = latest_metrics(job.ckpt_dir)
         step, loss = (0, None) if m is None else last_train_step_and_loss(m)
         summary_rows.append(
             {
                 "experiment": job.experiment_name,
-                "placement": job.placement,
-                "lr_tag": job.tag,
-                "lr_max": job.lr_max,
-                "status": f"exit_{proc.returncode}",
+                "pos_encoding": job.pos_encoding,
+                "batch_size": BATCH_SIZE,
+                "lr_max": LR_MAX,
+                "status": f"exit_{rc}",
                 "last_step": step,
                 "last_train_loss": loss,
                 "metrics": "" if m is None else str(m.relative_to(ROOT)),
             }
         )
-        if proc.returncode != 0:
-            print(f"[warn] {job.experiment_name} exit={proc.returncode}", flush=True)
 
-    out = LOG_DIR / "sweep_norm_ablation_summary.csv"
-    with open(out, "w", encoding="utf-8", newline="") as f:
-        if summary_rows:
-            w = csv.DictWriter(f, fieldnames=list(summary_rows[0].keys()))
-            w.writeheader()
-            w.writerows(summary_rows)
-    print(f"[write] {out}", flush=True)
+    if not args.dry_run:
+        write_summary(summary_rows, LOG_DIR / "sweep_pos_encoding_summary.csv")
 
 
 if __name__ == "__main__":

@@ -26,7 +26,7 @@ from cs336_basics.data_loader import get_batch
 from cs336_basics.logging import RunLogger, make_run_dir
 from cs336_basics.model.normalization import cross_entropy
 from cs336_basics.model.optimizer import AdamW, clip_gradients, get_lr_cosine_schedule
-from cs336_basics.model.transformer import TransformerLM, compute_d_ff
+from cs336_basics.model.transformer import TransformerLM, resolve_d_ff
 
 
 # ---------------------------------------------------------------------------
@@ -48,9 +48,13 @@ class ModelConfig:
     num_layers: int
     num_heads: int
     rope_theta: float
-    d_ff: int | None = None  # None → compute_d_ff(d_model)
+    d_ff: int | None = None  # None → resolve_d_ff(d_model, ffn_type)
     # pre_norm | post_norm | none_norm（默认与作业基线一致）
     norm_placement: str = "pre_norm"
+    # rope | no_rope（默认 RoPE）
+    pos_encoding: str = "rope"
+    # swiglu | silu（默认 SwiGLU）
+    ffn_type: str = "swiglu"
 
 
 @dataclass
@@ -117,6 +121,8 @@ def dict_to_train_config(d: dict[str, Any]) -> TrainConfig:
             rope_theta=float(model["rope_theta"]),
             d_ff=int(model["d_ff"]) if model.get("d_ff") is not None else None,
             norm_placement=str(model.get("norm_placement", "pre_norm")),
+            pos_encoding=str(model.get("pos_encoding", "rope")),
+            ffn_type=str(model.get("ffn_type", "swiglu")),
         ),
         optim=OptimConfig(
             lr_max=float(optim["lr_max"]),
@@ -201,7 +207,11 @@ def open_memmap_dataset(path: str | Path) -> np.memmap:
 
 def build_model(cfg: TrainConfig) -> TransformerLM:
     m = cfg.model
-    d_ff = m.d_ff if m.d_ff is not None else compute_d_ff(m.d_model)
+    d_ff = resolve_d_ff(
+        m.d_model,
+        ffn_type=m.ffn_type,  # type: ignore[arg-type]
+        d_ff=m.d_ff,
+    )
     device = torch.device(cfg.train.device)
     return TransformerLM(
         vocab_size=m.vocab_size,
@@ -212,6 +222,8 @@ def build_model(cfg: TrainConfig) -> TransformerLM:
         d_ff=d_ff,
         rope_theta=m.rope_theta,
         norm_placement=m.norm_placement,  # type: ignore[arg-type]
+        pos_encoding=m.pos_encoding,  # type: ignore[arg-type]
+        ffn_type=m.ffn_type,  # type: ignore[arg-type]
         device=device,
     )
 
@@ -396,11 +408,13 @@ def main(argv: list[str] | None = None) -> None:
                     wandb.log({"train/loss": loss, "train/lr": lr, "iter": it}, step=it)
 
             # 提前停：数值崩坏，或 train loss 已坏到不值得继续空转
-            if not math.isfinite(loss) or loss > 20.0:
+            # 阈值 200（非 20）：none_norm 在随机初始化下 CE 常约 20+，
+            # 仍可能继续训；20 会把「开局差」误判成「已炸」。
+            if not math.isfinite(loss) or loss > 200.0:
                 lr = optimizer.param_groups[0]["lr"]
                 if it % cfg.logging.log_interval != 0:
                     logger.log_train(it, loss, lr)
-                reason = "non-finite loss" if not math.isfinite(loss) else f"train_loss={loss:.4f}>20"
+                reason = "non-finite loss" if not math.isfinite(loss) else f"train_loss={loss:.4f}>200"
                 print(f"[abort] iter={it} {reason}  wall={logger.wall_s():.1f}s", flush=True)
                 break
 

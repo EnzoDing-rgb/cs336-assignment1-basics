@@ -421,3 +421,255 @@ artifacts/checkpoints/<experiment_name>/<YYYYMMDD_HHMM>/
 - **Curves:** `artifacts/checkpoints/tinystories_bs512/20260721_1253/curves/loss_vs_steps.png`, `.../loss_vs_wallclock.png`
 - **Notes:** _(fill in: what you changed / what you saw)_
 
+
+### 2026-07-21 · tinystories_post_norm_lr1.8e-3 · 20260721_1703
+
+- **Run dir:** `artifacts/checkpoints/tinystories_post_norm_lr1.8e-3/20260721_1703/`
+- **Wall (train loop):** — s
+- **Last train_loss / valid_loss:** — / —
+- **Curves:** `artifacts/checkpoints/tinystories_post_norm_lr1.8e-3/20260721_1703/curves/loss_vs_steps.png`, `.../loss_vs_wallclock.png`
+- **Notes:** _(fill in: what you changed / what you saw)_
+
+
+### 2026-07-21 · tinystories_post_norm_lr1e-3 · 20260721_1703
+
+- **Run dir:** `artifacts/checkpoints/tinystories_post_norm_lr1e-3/20260721_1703/`
+- **Wall (train loop):** — s
+- **Last train_loss / valid_loss:** — / —
+- **Curves:** `artifacts/checkpoints/tinystories_post_norm_lr1e-3/20260721_1703/curves/loss_vs_steps.png`, `.../loss_vs_wallclock.png`
+- **Notes:** _(fill in: what you changed / what you saw)_
+
+
+### 2026-07-21 · tinystories_post_norm_lr5.6e-4 · 20260721_1703
+
+- **Run dir:** `artifacts/checkpoints/tinystories_post_norm_lr5.6e-4/20260721_1703/`
+- **Wall (train loop):** — s
+- **Last train_loss / valid_loss:** — / —
+- **Curves:** `artifacts/checkpoints/tinystories_post_norm_lr5.6e-4/20260721_1703/curves/loss_vs_steps.png`, `.../loss_vs_wallclock.png`
+- **Notes:** _(fill in: what you changed / what you saw)_
+
+
+### 2026-07-21 · tinystories_post_norm_lr1.8e-4 · 20260721_1703
+
+- **Run dir:** `artifacts/checkpoints/tinystories_post_norm_lr1.8e-4/20260721_1703/`
+- **Wall (train loop):** — s
+- **Last train_loss / valid_loss:** — / —
+- **Curves:** `artifacts/checkpoints/tinystories_post_norm_lr1.8e-4/20260721_1703/curves/loss_vs_steps.png`, `.../loss_vs_wallclock.png`
+- **Notes:** _(fill in: what you changed / what you saw)_
+
+
+### 2026-07-21 · tinystories_none_norm_lr1.8e-3 · 20260721_1703
+
+- **Run dir:** `artifacts/checkpoints/tinystories_none_norm_lr1.8e-3/20260721_1703/`
+- **Wall (train loop):** — s
+- **Last train_loss / valid_loss:** — / —
+- **Curves:** `artifacts/checkpoints/tinystories_none_norm_lr1.8e-3/20260721_1703/curves/loss_vs_steps.png`, `.../loss_vs_wallclock.png`
+- **Notes:** _(fill in: what you changed / what you saw)_
+
+
+### 2026-07-21 · tinystories_none_norm_lr1e-3 · 20260721_1703
+
+- **Run dir:** `artifacts/checkpoints/tinystories_none_norm_lr1e-3/20260721_1703/`
+- **Wall (train loop):** — s
+- **Last train_loss / valid_loss:** — / —
+- **Curves:** `artifacts/checkpoints/tinystories_none_norm_lr1e-3/20260721_1703/curves/loss_vs_steps.png`, `.../loss_vs_wallclock.png`
+- **Notes:** _(fill in: what you changed / what you saw)_
+
+
+### 2026-07-21 · tinystories_none_norm_lr5.6e-4 · 20260721_1703
+
+- **Run dir:** `artifacts/checkpoints/tinystories_none_norm_lr5.6e-4/20260721_1703/`
+- **Wall (train loop):** — s
+- **Last train_loss / valid_loss:** — / —
+- **Curves:** `artifacts/checkpoints/tinystories_none_norm_lr5.6e-4/20260721_1703/curves/loss_vs_steps.png`, `.../loss_vs_wallclock.png`
+- **Notes:** _(fill in: what you changed / what you saw)_
+
+
+### 2026-07-21 · tinystories_none_norm_lr1.8e-4 · 20260721_1703
+
+- **Run dir:** `artifacts/checkpoints/tinystories_none_norm_lr1.8e-4/20260721_1703/`
+- **Wall (train loop):** — s
+- **Last train_loss / valid_loss:** — / —
+- **Curves:** `artifacts/checkpoints/tinystories_none_norm_lr1.8e-4/20260721_1703/curves/loss_vs_steps.png`, `.../loss_vs_wallclock.png`
+- **Notes:** _(fill in: what you changed / what you saw)_
+
+
+### 2026-07-21 · tinystories_post_norm_lr1.8e-3 · 20260721_1707
+
+- **Run dir:** `artifacts/checkpoints/tinystories_post_norm_lr1.8e-3/20260721_1707/`
+- **Wall (train loop):** 1992.15 s
+- **Last train_loss / valid_loss:** 1.478081 / 1.468839
+- **Curves:** `artifacts/checkpoints/tinystories_post_norm_lr1.8e-3/20260721_1707/curves/loss_vs_steps.png`, `.../loss_vs_wallclock.png`
+- **Notes:** _(fill in: what you changed / what you saw)_
+
+
+### 2026-07-21 · tinystories_post_norm_lr1e-3 · 20260721_1741
+
+- **Run dir:** `artifacts/checkpoints/tinystories_post_norm_lr1e-3/20260721_1741/`
+- **Wall (train loop):** 1992.00 s
+- **Last train_loss / valid_loss:** 1.456050 / 1.449351
+- **Curves:** `artifacts/checkpoints/tinystories_post_norm_lr1e-3/20260721_1741/curves/loss_vs_steps.png`, `.../loss_vs_wallclock.png`
+- **Notes:** _(fill in: what you changed / what you saw)_
+
+
+### 2026-07-21 · tinystories_post_norm_lr5.6e-4 · 20260721_1814
+
+- **Run dir:** `artifacts/checkpoints/tinystories_post_norm_lr5.6e-4/20260721_1814/`
+- **Wall (train loop):** 1990.57 s
+- **Last train_loss / valid_loss:** 1.469007 / 1.462197
+- **Curves:** `artifacts/checkpoints/tinystories_post_norm_lr5.6e-4/20260721_1814/curves/loss_vs_steps.png`, `.../loss_vs_wallclock.png`
+- **Notes:** _(fill in: what you changed / what you saw)_
+
+
+### 2026-07-21 · tinystories_post_norm_lr1.8e-4 · 20260721_1848
+
+- **Run dir:** `artifacts/checkpoints/tinystories_post_norm_lr1.8e-4/20260721_1848/`
+- **Wall (train loop):** 1988.92 s
+- **Last train_loss / valid_loss:** 1.613479 / 1.603410
+- **Curves:** `artifacts/checkpoints/tinystories_post_norm_lr1.8e-4/20260721_1848/curves/loss_vs_steps.png`, `.../loss_vs_wallclock.png`
+- **Notes:** _(fill in: what you changed / what you saw)_
+
+
+### 2026-07-21 · tinystories_pre_norm_lr1.8e-2 · 20260721_1922
+
+- **Run dir:** `artifacts/checkpoints/tinystories_pre_norm_lr1.8e-2/20260721_1922/`
+- **Wall (train loop):** 1993.87 s
+- **Last train_loss / valid_loss:** 1.641321 / 1.647284
+- **Curves:** `artifacts/checkpoints/tinystories_pre_norm_lr1.8e-2/20260721_1922/curves/loss_vs_steps.png`, `.../loss_vs_wallclock.png`
+- **Notes:** _(fill in: what you changed / what you saw)_
+
+
+### 2026-07-21 · tinystories_pre_norm_lr9e-2 · 20260721_1955
+
+- **Run dir:** `artifacts/checkpoints/tinystories_pre_norm_lr9e-2/20260721_1955/`
+- **Wall (train loop):** 2002.02 s
+- **Last train_loss / valid_loss:** 2.194704 / 2.235170
+- **Curves:** `artifacts/checkpoints/tinystories_pre_norm_lr9e-2/20260721_1955/curves/loss_vs_steps.png`, `.../loss_vs_wallclock.png`
+- **Notes:** _(fill in: what you changed / what you saw)_
+
+
+### 2026-07-21 · tinystories_post_norm_lr1.8e-2 · 20260721_2029
+
+- **Run dir:** `artifacts/checkpoints/tinystories_post_norm_lr1.8e-2/20260721_2029/`
+- **Wall (train loop):** 1989.92 s
+- **Last train_loss / valid_loss:** 1.756684 / 1.764359
+- **Curves:** `artifacts/checkpoints/tinystories_post_norm_lr1.8e-2/20260721_2029/curves/loss_vs_steps.png`, `.../loss_vs_wallclock.png`
+- **Notes:** _(fill in: what you changed / what you saw)_
+
+
+### 2026-07-21 · tinystories_post_norm_lr9e-2 · 20260721_2103
+
+- **Run dir:** `artifacts/checkpoints/tinystories_post_norm_lr9e-2/20260721_2103/`
+- **Wall (train loop):** 621.92 s
+- **Last train_loss / valid_loss:** 22.099289 / 5.836689
+- **Curves:** `artifacts/checkpoints/tinystories_post_norm_lr9e-2/20260721_2103/curves/loss_vs_steps.png`, `.../loss_vs_wallclock.png`
+- **Notes:** _(fill in: what you changed / what you saw)_
+
+
+### 2026-07-21 · tinystories_none_norm_lr1.8e-4 · 20260721_2113
+
+- **Run dir:** `artifacts/checkpoints/tinystories_none_norm_lr1.8e-4/20260721_2113/`
+- **Wall (train loop):** 0.60 s
+- **Last train_loss / valid_loss:** 21.182518 / —
+- **Curves:** `artifacts/checkpoints/tinystories_none_norm_lr1.8e-4/20260721_2113/curves/loss_vs_steps.png`, `.../loss_vs_wallclock.png`
+- **Notes:** _(fill in: what you changed / what you saw)_
+
+
+### 2026-07-21 · tinystories_none_norm_lr1.8e-3 · 20260721_2113
+
+- **Run dir:** `artifacts/checkpoints/tinystories_none_norm_lr1.8e-3/20260721_2113/`
+- **Wall (train loop):** 0.56 s
+- **Last train_loss / valid_loss:** 21.182518 / —
+- **Curves:** `artifacts/checkpoints/tinystories_none_norm_lr1.8e-3/20260721_2113/curves/loss_vs_steps.png`, `.../loss_vs_wallclock.png`
+- **Notes:** _(fill in: what you changed / what you saw)_
+
+
+### 2026-07-21 · tinystories_none_norm_lr1.8e-2 · 20260721_2113
+
+- **Run dir:** `artifacts/checkpoints/tinystories_none_norm_lr1.8e-2/20260721_2113/`
+- **Wall (train loop):** 0.56 s
+- **Last train_loss / valid_loss:** 21.182518 / —
+- **Curves:** `artifacts/checkpoints/tinystories_none_norm_lr1.8e-2/20260721_2113/curves/loss_vs_steps.png`, `.../loss_vs_wallclock.png`
+- **Notes:** _(fill in: what you changed / what you saw)_
+
+
+### 2026-07-21 · tinystories_none_norm_lr9e-2 · 20260721_2113
+
+- **Run dir:** `artifacts/checkpoints/tinystories_none_norm_lr9e-2/20260721_2113/`
+- **Wall (train loop):** 0.53 s
+- **Last train_loss / valid_loss:** 21.182518 / —
+- **Curves:** `artifacts/checkpoints/tinystories_none_norm_lr9e-2/20260721_2113/curves/loss_vs_steps.png`, `.../loss_vs_wallclock.png`
+- **Notes:** _(fill in: what you changed / what you saw)_
+
+
+### 2026-07-21 · tinystories_post_norm_lr9e-2 · 20260721_2118
+
+- **Run dir:** `artifacts/checkpoints/tinystories_post_norm_lr9e-2/20260721_2118/`
+- **Wall (train loop):** 1995.60 s
+- **Last train_loss / valid_loss:** 5.796884 / 5.791701
+- **Curves:** `artifacts/checkpoints/tinystories_post_norm_lr9e-2/20260721_2118/curves/loss_vs_steps.png`, `.../loss_vs_wallclock.png`
+- **Notes:** _(fill in: what you changed / what you saw)_
+
+
+### 2026-07-21 · tinystories_none_norm_lr1.8e-4 · 20260721_2152
+
+- **Run dir:** `artifacts/checkpoints/tinystories_none_norm_lr1.8e-4/20260721_2152/`
+- **Wall (train loop):** 1900.71 s
+- **Last train_loss / valid_loss:** 1.640495 / 1.648220
+- **Curves:** `artifacts/checkpoints/tinystories_none_norm_lr1.8e-4/20260721_2152/curves/loss_vs_steps.png`, `.../loss_vs_wallclock.png`
+- **Notes:** _(fill in: what you changed / what you saw)_
+
+
+### 2026-07-21 · tinystories_none_norm_lr1.8e-3 · 20260721_2224
+
+- **Run dir:** `artifacts/checkpoints/tinystories_none_norm_lr1.8e-3/20260721_2224/`
+- **Wall (train loop):** 79.99 s
+- **Last train_loss / valid_loss:** 6007.055664 / 2.682920
+- **Curves:** `artifacts/checkpoints/tinystories_none_norm_lr1.8e-3/20260721_2224/curves/loss_vs_steps.png`, `.../loss_vs_wallclock.png`
+- **Notes:** _(fill in: what you changed / what you saw)_
+
+
+### 2026-07-21 · tinystories_none_norm_lr1.8e-2 · 20260721_2225
+
+- **Run dir:** `artifacts/checkpoints/tinystories_none_norm_lr1.8e-2/20260721_2225/`
+- **Wall (train loop):** 18.56 s
+- **Last train_loss / valid_loss:** 1199.653320 / —
+- **Curves:** `artifacts/checkpoints/tinystories_none_norm_lr1.8e-2/20260721_2225/curves/loss_vs_steps.png`, `.../loss_vs_wallclock.png`
+- **Notes:** _(fill in: what you changed / what you saw)_
+
+
+### 2026-07-21 · tinystories_none_norm_lr9e-2 · 20260721_2226
+
+- **Run dir:** `artifacts/checkpoints/tinystories_none_norm_lr9e-2/20260721_2226/`
+- **Wall (train loop):** 5.18 s
+- **Last train_loss / valid_loss:** 16996166.000000 / —
+- **Curves:** `artifacts/checkpoints/tinystories_none_norm_lr9e-2/20260721_2226/curves/loss_vs_steps.png`, `.../loss_vs_wallclock.png`
+- **Notes:** _(fill in: what you changed / what you saw)_
+
+
+### 2026-07-22 · tinystories_rope_b64_lr1.8e-3 · 20260721_2344
+
+- **Run dir:** `artifacts/checkpoints/tinystories_rope_b64_lr1.8e-3/20260721_2344/`
+- **Wall (train loop):** 3836.98 s
+- **Last train_loss / valid_loss:** 1.395041 / 1.353412
+- **Curves:** `artifacts/checkpoints/tinystories_rope_b64_lr1.8e-3/20260721_2344/curves/loss_vs_steps.png`, `.../loss_vs_wallclock.png`
+- **Notes:** _(fill in: what you changed / what you saw)_
+
+
+### 2026-07-22 · tinystories_no_rope_b64_lr1.8e-3 · 20260722_0049
+
+- **Run dir:** `artifacts/checkpoints/tinystories_no_rope_b64_lr1.8e-3/20260722_0049/`
+- **Wall (train loop):** 3684.82 s
+- **Last train_loss / valid_loss:** 1.454648 / 1.414034
+- **Curves:** `artifacts/checkpoints/tinystories_no_rope_b64_lr1.8e-3/20260722_0049/curves/loss_vs_steps.png`, `.../loss_vs_wallclock.png`
+- **Notes:** _(fill in: what you changed / what you saw)_
+
+
+### 2026-07-22 · tinystories_silu_b64_lr1.8e-3 · 20260722_1152
+
+- **Run dir:** `artifacts/checkpoints/tinystories_silu_b64_lr1.8e-3/20260722_1152/`
+- **Wall (train loop):** 3765.03 s
+- **Last train_loss / valid_loss:** 1.408039 / 1.367624
+- **Curves:** `artifacts/checkpoints/tinystories_silu_b64_lr1.8e-3/20260722_1152/curves/loss_vs_steps.png`, `.../loss_vs_wallclock.png`
+- **Notes:** _(fill in: what you changed / what you saw)_
+

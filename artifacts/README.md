@@ -7,4 +7,4 @@
 | `tokens/` | 编码后的 `.npy`：`tinystories_tokens/`、`owt_tokens/` |
 | `plots/` | 交付图（lr / batch_size / rope 等） |
 | `stories/` | 解码网格生成的故事原文 |
-| `logs/` | 扫参与监控日志（`lr/`、`batch_size/`、`tokenizer/`） |
+| `logs/` | 扫参与监控日志（`lr/`、`batch_size/`、`tokenizer/`、`norm_ablation/`） |

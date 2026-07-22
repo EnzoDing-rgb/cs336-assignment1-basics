@@ -16,6 +16,8 @@ model:
   num_heads: 16
   rope_theta: 10000.0
   norm_placement: pre_norm
+  pos_encoding: rope
+  ffn_type: swiglu
 
 optim:
   lr_max: 3.0e-4

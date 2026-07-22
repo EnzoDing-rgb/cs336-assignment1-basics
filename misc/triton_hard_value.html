@@ -1,0 +1,502 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Triton 的硬价值：Fused Softmax</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css" />
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body, {delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}]});"></script>
+  <style>
+    :root {
+      --bg: #f6f1e7;
+      --paper: #fffdf7;
+      --ink: #171717;
+      --muted: #666156;
+      --line: #d7cdbc;
+      --accent: #b45309;
+      --cuda: #1f3b61;
+      --cuda-bg: #e8eef6;
+      --triton: #15523f;
+      --triton-bg: #e6f3ed;
+      --bad: #b91c1c;
+      --good: #047857;
+      --mono: "SF Mono", Menlo, Consolas, monospace;
+      --ui: "Inter", "PingFang SC", system-ui, sans-serif;
+      --serif: "Iowan Old Style", "Palatino Linotype", "Songti SC", serif;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      color: var(--ink);
+      font-family: var(--ui);
+      line-height: 1.65;
+      background:
+        radial-gradient(circle at 0% 0%, rgba(180,83,9,.12), transparent 35%),
+        radial-gradient(circle at 100% 0%, rgba(4,120,87,.12), transparent 35%),
+        var(--bg);
+      padding: 2rem 1.25rem 4rem;
+    }
+    .wrap { max-width: 1220px; margin: 0 auto; }
+    header { margin-bottom: 1.75rem; }
+    .eyebrow {
+      color: var(--accent);
+      font-size: .76rem;
+      font-weight: 800;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+      margin: 0 0 .5rem;
+    }
+    h1 {
+      font-family: var(--serif);
+      font-size: clamp(1.75rem, 3vw, 2.55rem);
+      line-height: 1.15;
+      margin: 0 0 .7rem;
+    }
+    .lede { max-width: 54rem; margin: 0; color: var(--muted); font-size: 1.03rem; }
+    h2 {
+      font-family: var(--serif);
+      font-size: 1.45rem;
+      margin: 2.2rem 0 .8rem;
+      padding-bottom: .35rem;
+      border-bottom: 1px solid var(--line);
+    }
+    h3 { margin: 1.4rem 0 .65rem; font-size: 1.05rem; color: var(--muted); }
+    p { margin: .72rem 0; }
+    code { font-family: var(--mono); font-size: .9em; }
+    .card {
+      background: var(--paper);
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 1rem 1.15rem;
+      margin: 1rem 0;
+      box-shadow: 0 1px 0 rgba(0,0,0,.04);
+    }
+    .claim {
+      border-left: 5px solid var(--accent);
+      font-size: 1.02rem;
+    }
+    .claim strong { color: var(--accent); }
+    .metric-row {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: .75rem;
+      margin: 1rem 0;
+    }
+    @media (max-width: 820px) { .metric-row { grid-template-columns: 1fr 1fr; } }
+    @media (max-width: 520px) { .metric-row { grid-template-columns: 1fr; } }
+    .metric {
+      background: var(--paper);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: .85rem 1rem;
+    }
+    .metric .k { color: var(--muted); font-size: .8rem; text-transform: uppercase; letter-spacing: .06em; }
+    .metric .v { font-family: var(--mono); font-weight: 800; margin-top: .25rem; font-size: 1.05rem; }
+    .flow {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1rem;
+      margin: 1rem 0 1.35rem;
+    }
+    @media (max-width: 900px) { .flow { grid-template-columns: 1fr; } }
+    .flowbox {
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 1rem;
+      background: var(--paper);
+    }
+    .flowbox h3 { margin-top: 0; color: var(--ink); }
+    .steps {
+      display: flex;
+      flex-wrap: wrap;
+      gap: .35rem;
+      align-items: center;
+      font-family: var(--mono);
+      font-size: .78rem;
+    }
+    .steps span {
+      border: 1px solid var(--line);
+      background: #faf5eb;
+      padding: .3rem .5rem;
+      border-radius: 7px;
+    }
+    .steps .arrow { border: 0; background: transparent; color: var(--muted); }
+    .compare {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: .9rem;
+      align-items: stretch;
+      margin: 1rem 0 1.5rem;
+    }
+    @media (max-width: 980px) { .compare { grid-template-columns: 1fr; } }
+    .pane {
+      border-radius: 14px;
+      overflow: hidden;
+      border: 1px solid var(--line);
+      background: var(--paper);
+      display: flex;
+      flex-direction: column;
+    }
+    .head {
+      padding: .72rem 1rem;
+      color: white;
+      display: flex;
+      justify-content: space-between;
+      gap: .6rem;
+      font-weight: 800;
+      letter-spacing: .04em;
+      text-transform: uppercase;
+      font-size: .82rem;
+    }
+    .head small { font-weight: 500; opacity: .85; text-transform: none; letter-spacing: 0; }
+    .cuda .head { background: var(--cuda); }
+    .triton .head { background: var(--triton); }
+    pre {
+      margin: 0;
+      padding: 1rem 1.05rem 1.15rem;
+      overflow-x: auto;
+      font-family: var(--mono);
+      font-size: .78rem;
+      line-height: 1.55;
+      flex: 1;
+    }
+    .cuda pre { background: var(--cuda-bg); }
+    .triton pre { background: var(--triton-bg); }
+    .comment { color: #6b7280; }
+    .kw { color: #9a3412; font-weight: 800; }
+    .fn { color: #1d4ed8; font-weight: 700; }
+    .tl { color: var(--good); font-weight: 800; }
+    .warn { background: rgba(185,28,28,.12); outline: 1px solid rgba(185,28,28,.25); border-radius: 3px; }
+    .win { background: rgba(4,120,87,.14); outline: 1px solid rgba(4,120,87,.28); border-radius: 3px; }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      background: var(--paper);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      overflow: hidden;
+      margin: 1rem 0;
+      font-size: .93rem;
+    }
+    th, td { padding: .7rem .85rem; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
+    th { background: #eee4d2; font-size: .78rem; text-transform: uppercase; letter-spacing: .05em; }
+    tr:last-child td { border-bottom: 0; }
+    .good { color: var(--good); font-weight: 800; }
+    .bad { color: var(--bad); font-weight: 800; }
+    .two { display: grid; grid-template-columns: 1fr 1fr; gap: .85rem; }
+    @media (max-width: 850px) { .two { grid-template-columns: 1fr; } }
+    ul { padding-left: 1.2rem; }
+    li { margin: .45rem 0; }
+    footer { margin-top: 2.2rem; color: var(--muted); font-size: .85rem; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <p class="eyebrow">Triton hard value</p>
+      <h1>Triton 的工业价值：不是替代 PyTorch，而是补上自定义 kernel 这层</h1>
+      <p class="lede">
+        平常写训练代码，直接用 Python / PyTorch 是正确选择。Triton 的位置不是“每个算子都重写一遍”，
+        而是当 profiler 说明某个 Python 组合算子在 kernel launch 或 HBM 往返上变成瓶颈时，用它写一个融合 kernel。
+      </p>
+    </header>
+
+    <div class="card claim">
+      <strong>核心价值：</strong>
+      PyTorch 负责表达模型，CUDA 负责最终机器级控制，Triton 夹在中间：
+      比 PyTorch 更能控制融合和片上数据流，比 CUDA 更快写、更容易 autotune。
+    </div>
+
+    <h2>0. 你的疑问：我直接写 Python 不就得了？</h2>
+    <p>对，绝大多数时候就该直接写 Python / PyTorch。你们代码库里的 softmax 就是这样：</p>
+    <div class="compare">
+      <section class="pane cuda">
+        <div class="head">
+          <span>PyTorch 写法</span>
+          <small>模型代码里最自然</small>
+        </div>
+        <pre><span class="kw">def</span> <span class="fn">softmax</span>(x, dim):
+    x_max = torch.amax(x, dim=dim, keepdim=True)
+    exp_x = torch.exp(x - x_max)
+    return exp_x / torch.sum(exp_x, dim=dim, keepdim=True)</pre>
+      </section>
+      <section class="pane triton">
+        <div class="head">
+          <span>什么时候才想 Triton</span>
+          <small>profiler 指向它时</small>
+        </div>
+        <pre><span class="comment"># 默认：继续用 PyTorch</span>
+model = Transformer(...)
+loss = cross_entropy(...)
+
+<span class="comment"># 只有当 profiler 看到：</span>
+<span class="comment"># 1) 很多小 kernel launch</span>
+<span class="comment"># 2) 中间 tensor 反复写 HBM</span>
+<span class="comment"># 3) 某个 shape 高频出现</span>
+<span class="comment"># 才考虑把这段换成 Triton kernel</span></pre>
+      </section>
+    </div>
+
+    <div class="card">
+      <p><strong>分工很简单：</strong></p>
+      <ul>
+        <li><strong>PyTorch</strong>：最快写出正确模型，自动求导，生态完整。训练主干应该先用它。</li>
+        <li><strong>Triton</strong>：把几个 PyTorch ops 融成一个 GPU kernel，控制数据怎么留在片上，减少 HBM 往返。</li>
+        <li><strong>CUDA</strong>：极限控制。需要写 shared memory、warp primitive、同步、模板、编译扩展。</li>
+      </ul>
+      <p>
+        所以 Triton 不是“Python 的替代品”。它是 <strong>PyTorch profiling 之后的优化工具</strong>。
+        你不会因为会 Triton 就把所有 softmax 都重写；你会在一个模型反复跑、一个 kernel 占了足够多时间时重写它。
+      </p>
+    </div>
+
+    <h2>1. 真实负载：row-wise softmax</h2>
+    <p>输入是一个二维 tensor：</p>
+    <p>
+      $$
+      X \in \mathbb{R}^{M \times N},\qquad M=4096,\quad N=1024
+      $$
+    </p>
+    <p>每一行独立做 softmax：</p>
+    <p>
+      $$
+      Y_{i,j}
+      =
+      \frac{\exp(X_{i,j}-m_i)}
+           {\sum_{k=0}^{N-1}\exp(X_{i,k}-m_i)},
+      \qquad
+      m_i=\max_k X_{i,k}
+      $$
+    </p>
+
+    <div class="metric-row">
+      <div class="metric"><div class="k">Rows</div><div class="v">M = 4096</div></div>
+      <div class="metric"><div class="k">Cols</div><div class="v">N = 1024</div></div>
+      <div class="metric"><div class="k">One row</div><div class="v">4 KB fp32</div></div>
+      <div class="metric"><div class="k">Whole tensor</div><div class="v">16 MB</div></div>
+    </div>
+
+    <h2>2. 关键差别：HBM 往返次数</h2>
+    <div class="flow">
+      <section class="flowbox">
+        <h3>CUDA 朴素拆 kernel</h3>
+        <div class="steps">
+          <span>读 X</span><span class="arrow">→</span><span>写 max</span><span class="arrow">→</span>
+          <span>读 X+max</span><span class="arrow">→</span><span>写 exp</span><span class="arrow">→</span>
+          <span>读 exp</span><span class="arrow">→</span><span>写 sum</span><span class="arrow">→</span>
+          <span>读 exp+sum</span><span class="arrow">→</span><span>写 Y</span>
+        </div>
+        <p>中间的 <code>max</code>、<code>exp</code>、<code>sum</code> 都变成 HBM 上的临时结果。</p>
+      </section>
+      <section class="flowbox">
+        <h3>Triton fused kernel</h3>
+        <div class="steps">
+          <span>读一行 X</span><span class="arrow">→</span><span>片上 max</span><span class="arrow">→</span>
+          <span>片上 exp</span><span class="arrow">→</span><span>片上 sum</span><span class="arrow">→</span>
+          <span>写一行 Y</span>
+        </div>
+        <p>一个 program 负责一行。中间值留在片上，HBM 只承担输入和输出。</p>
+      </section>
+    </div>
+
+    <table>
+      <thead>
+        <tr>
+          <th>方案</th>
+          <th>HBM 读写量（粗略）</th>
+          <th>要点</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>朴素 CUDA 多 kernel</td>
+          <td class="bad">约 7× tensor 级访问</td>
+          <td>读写临时 <code>exp</code>；每个 kernel 之间靠 HBM 传中间结果。</td>
+        </tr>
+        <tr>
+          <td>Triton fused softmax</td>
+          <td class="good">约 2× tensor 级访问</td>
+          <td>读 <code>X</code> 一次，写 <code>Y</code> 一次；中间归约在片上。</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h2>3. 实际工作里怎么选</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>阶段</th>
+          <th>你通常做什么</th>
+          <th>原因</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>第一版模型</td>
+          <td>PyTorch 原生 op</td>
+          <td>代码清楚，自动求导稳，改模型最快。</td>
+        </tr>
+        <tr>
+          <td>发现慢</td>
+          <td>先看 profiler，再试 <code>torch.compile</code> / FlashAttention / xFormers / cuDNN 等现成 kernel</td>
+          <td>已有库 kernel 通常维护得更好，也覆盖很多常见 shape。</td>
+        </tr>
+        <tr>
+          <td>现成 kernel 卡住</td>
+          <td>写 Triton</td>
+          <td>你的 shape、mask、布局、融合方式很具体；Triton 能快速写一个专用 fused kernel。</td>
+        </tr>
+        <tr>
+          <td>极限榨干</td>
+          <td>CUDA / CUTLASS / 手写汇编级优化</td>
+          <td>需要完全控制 warp、shared memory、pipeline、指令选择。</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="card claim">
+      <strong>这就是为什么工业界用 Triton：</strong>
+      它常常不是训练代码作者每天都要写的东西，而是框架作者、infra 团队、模型性能优化的人用来补齐
+      “PyTorch 太通用，CUDA 太重” 中间那一层。
+    </div>
+
+    <h2>4. 左右对照：同一个 softmax</h2>
+    <p>左边不是「高性能 CUDA 最终形态」，而是很多人第一版会写出的拆 kernel 思路。右边是 Triton 的自然写法：一行一个 program。</p>
+
+    <div class="compare">
+      <section class="pane cuda">
+        <div class="head">
+          <span>CUDA 朴素多 kernel</span>
+          <small>中间结果走 HBM</small>
+        </div>
+        <pre><span class="comment">// Kernel 1: 每行求 max，写 row_max[M]</span>
+<span class="kw">__global__</span> <span class="kw">void</span> <span class="fn">row_max</span>(X, row_max, M, N) {
+  <span class="comment">// 一个 block 处理一行；内部做 reduction</span>
+  <span class="comment">// 结果写回 HBM: row_max[row]</span>
+}
+
+<span class="comment">// Kernel 2: 读 X 和 row_max，写 exp_tmp[M,N]</span>
+<span class="kw">__global__</span> <span class="kw">void</span> <span class="fn">exp_shifted</span>(X, row_max, exp_tmp, M, N) {
+  <span class="kw">int</span> idx = blockIdx.x * blockDim.x + threadIdx.x;
+  <span class="kw">int</span> row = idx / N;
+  exp_tmp[idx] = expf(X[idx] - row_max[row]);
+  <span class="comment">// exp_tmp 是完整临时 tensor，写进 HBM</span>
+}
+
+<span class="comment">// Kernel 3: 每行求 sum(exp_tmp)，写 row_sum[M]</span>
+<span class="kw">__global__</span> <span class="kw">void</span> <span class="fn">row_sum</span>(exp_tmp, row_sum, M, N) {
+  <span class="comment">// 再读一遍 exp_tmp；reduction 后写 row_sum[row]</span>
+}
+
+<span class="comment">// Kernel 4: 归一化，读 exp_tmp + row_sum，写 Y</span>
+<span class="kw">__global__</span> <span class="kw">void</span> <span class="fn">normalize</span>(exp_tmp, row_sum, Y, M, N) {
+  <span class="kw">int</span> idx = blockIdx.x * blockDim.x + threadIdx.x;
+  <span class="kw">int</span> row = idx / N;
+  Y[idx] = exp_tmp[idx] / row_sum[row];
+}</pre>
+      </section>
+
+      <section class="pane triton">
+        <div class="head">
+          <span>Triton fused row softmax</span>
+          <small>一行留在片上</small>
+        </div>
+        <pre><span class="kw">@triton.jit</span>
+<span class="kw">def</span> <span class="fn">softmax_kernel</span>(X, Y, M: <span class="tl">tl</span>.constexpr,
+                   N: <span class="tl">tl</span>.constexpr,
+                   BLOCK_N: <span class="tl">tl</span>.constexpr):
+    <span class="comment"># tl = triton.language</span>
+    <span class="comment"># 一个 program 负责一行</span>
+    row = <span class="tl">tl</span>.program_id(0)
+
+    <span class="comment"># offsets = 这一行的列下标 [0..BLOCK_N)</span>
+    cols = <span class="tl">tl</span>.arange(0, BLOCK_N)
+    mask = cols &lt; N
+
+    <span class="comment"># 读一整行到片上向量</span>
+    x = <span class="tl">tl</span>.load(X + row * N + cols,
+                mask=mask, other=-float("inf"))
+
+    <span class="comment"># 下面全在片上向量 / 标量归约里完成</span>
+    m = <span class="tl">tl</span>.max(x, axis=0)
+    z = x - m
+    num = <span class="tl">tl</span>.exp(z)
+    den = <span class="tl">tl</span>.sum(num, axis=0)
+    y = num / den
+
+    <span class="comment"># 写最终结果；没有 exp_tmp / row_sum 临时 tensor</span>
+    <span class="tl">tl</span>.store(Y + row * N + cols, y, mask=mask)
+
+<span class="comment"># launch: grid=(M,)</span>
+<span class="comment"># softmax_kernel[(4096,)](X, Y, M=4096, N=1024, BLOCK_N=1024)</span></pre>
+      </section>
+    </div>
+
+    <h2>5. 为什么这例子更能说明 Triton</h2>
+    <div class="two">
+      <div class="card">
+        <h3>CUDA 当然也能手写融合版</h3>
+        <p>
+          高手可以用 CUDA 写一个 fused softmax：手写 shared memory、warp reduction、block reduction、边界处理、向量化 load/store。
+          这会比朴素 CUDA 快很多。
+        </p>
+        <p>
+          代价是源码复杂度快速上升，而且每换一种 shape / dtype / GPU，调参成本也跟着上升。
+        </p>
+      </div>
+      <div class="card">
+        <h3>Triton 的位置</h3>
+        <p>
+          Triton 让你直接写「一行 softmax 的数学数据流」，编译器处理 program 内向量化、寄存器分配、片上归约、mask、生成 GPU kernel。
+        </p>
+        <p>
+          价值是把 80% 的手写 CUDA 性能工作，变成更短的可读 Python kernel，再配合 autotune 调 tile / warp。
+        </p>
+      </div>
+    </div>
+
+    <h2>6. 再往工业里看：attention 也是这个模式</h2>
+    <p>
+      Softmax 是 attention 的核心环节。FlashAttention 的大思路也类似：
+      把一块 $QK^\top$ 分数、softmax 统计量、乘 $V$ 的中间结果尽量留在片上，减少 HBM 临时矩阵往返。
+    </p>
+    <p>
+      所以 Triton 在工业界常见于：fused softmax、LayerNorm/RMSNorm、FlashAttention、MoE routing、custom matmul、各种「PyTorch 组合算子太多 HBM 往返」的地方。
+    </p>
+
+    <h2>7. 总结</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>例子</th>
+          <th>Triton 的价值</th>
+          <th>判断</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>y=2x+1</code> / GELU</td>
+          <td>写法更短，按向量写一段 offsets</td>
+          <td>说明力弱</td>
+        </tr>
+        <tr>
+          <td>row-wise softmax</td>
+          <td>把 max / exp / sum / normalize 融合进一个 kernel，少走 HBM</td>
+          <td class="good">说明力强</td>
+        </tr>
+        <tr>
+          <td>attention / norm / custom matmul</td>
+          <td>把片上数据流写清楚，让编译器管低层映射，再 autotune</td>
+          <td class="good">工业常用</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <footer>
+      本页文件：<code>misc/triton_hard_value.html</code>。打开方式：在仓库根目录起 HTTP server 后访问本文件。
+    </footer>
+  </div>
+</body>
+</html>

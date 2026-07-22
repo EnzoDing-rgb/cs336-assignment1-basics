@@ -143,21 +143,31 @@ class AdamW(torch.optim.Optimizer):
                 # α_t ← α * sqrt(1 - β2^t) / (1 - β1^t)
                 lr_t = lr * math.sqrt(1 - beta2**t) / (1 - beta1**t)
 
-                # PyTorch 约定：名字以「_」结尾的方法 = 原地（in-place）修改该张量，不新建一份。
-                # 例如 p.mul_(c) 等价于 p ← p * c；m.add_(g, alpha=a) 等价于 m ← m + a*g。
-                # 官方优化器实现里大量用这种写法（省分配、直接改参数/状态），属于常见实践。
-                # 写成 p.data = p.data * c、m = beta1*m + ... 再赋回 state 也对，只是更啰嗦、多临时张量。
+                # PyTorch：带「_」的方法原地改张量。p.mul_(c) ≡ p←p*c；m.add_(g, alpha=a) ≡ m←m+a*g。
 
-                # 解耦 weight decay：θ ← θ - α λ θ  ≡  θ ← θ * (1 - α λ)
+                # --- Weight decay（本配置 α=lr=3e-4，λ=weight_decay=0.1）---
+                # 公式：θ ← θ * (1 - α λ)。代入数：α λ = 3e-4 * 0.1 = 3e-5，故乘子 = 0.99997。
+                # 例子：某权重 θ=2.0，仅做本行、不算后面 Adam 时：
+                #   λ=0  →  2.0 * 1       = 2.0      （参数原样）
+                #   λ=0.1 → 2.0 * 0.99997 = 1.99994  （每步往 0 收一丁点）
+                # 一万步量级、若梯度长期推不动它：2.0 * (0.99997)**10000 ≈ 1.48，幅度被压下去。
+                # 要解决的事：参数越长越大、模型死记训练集；每步固定收缩，减轻过拟合。
+                # AdamW 解耦：收缩直接乘在 θ 上。若改成 L2（grad ← grad + λθ 再进 m/v），
+                #   同一 θ=2、λ=0.1 会往 grad 里加 0.2；再被 √v 除掉，实际衰减强弱跟自适应步长缠在一起。
+                # 容易忘：本行用的是 α=lr，下面 Adam 那步用的才是带 bias correction 的 lr_t。
                 p.mul_(1 - lr * weight_decay)
 
-                # m ← β1 m + (1-β1) g   （原地写回 state["m"]）
-                # v ← β2 v + (1-β2) g²  （addcmul_: v ← v + value * grad * grad）
+                # m ← β1 m + (1-β1) g
+                # v ← β2 v + (1-β2) g²   （addcmul_: v ← v + value * grad * grad）
                 m.mul_(beta1).add_(grad, alpha=1 - beta1)
                 v.mul_(beta2).addcmul_(grad, grad, value=1 - beta2)
 
-                # θ ← θ - α_t * m / (√v + ε)
-                # addcdiv_: p ← p + value * m / denom
+                # θ ← θ - α_t * m / (√v + ε)    （本配置 ε=1e-8）
+                # 例子：某维长期 grad=0，则 v 一直是 0，m 也是 0 → 商为 0，没事。
+                # 更危险：m=1e-3（还有一点动量），v=0（二阶还没攒起来）
+                #   ε=0    →  1e-3 / 0      → Inf/NaN，参数直接坏掉
+                #   ε=1e-8 →  1e-3 / 1e-8   = 1e5，步子大但有限
+                #   正常 √v=0.1 时：1e-3/(0.1+1e-8) ≈ 0.01，ε 可以当不存在
                 p.addcdiv_(m, v.sqrt().add_(eps), value=-lr_t)
 
         return loss
