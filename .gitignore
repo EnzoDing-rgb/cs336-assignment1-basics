@@ -182,7 +182,7 @@ logs/
 !tests/_snapshots/**
 
 # local training artifacts (checkpoints / tokens / logs stay local)
-artifacts/
+artifacts/*
 # keep small deliverables tracked
 !artifacts/README.md
 !artifacts/plots/
